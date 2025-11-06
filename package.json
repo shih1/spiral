@@ -39,5 +39,9 @@
   },
   "devDependencies": {
     "gh-pages": "^6.3.0"
-  }
+  },
+  "homepage": "https://shih1.github.io/spiral",
+  "predeploy": "npm run build",
+  "deploy": "gh-pages -d build"
+
 }
