@@ -11,7 +11,7 @@ const MicrotonalSpiral = () => {
     baseFreq: 440,
     spiralTightness: 0.3,
     showLabels: true,
-    colorMode: "interval",
+    colorMode: "piano",
     keyWidth: 35,
     keyHeight: 80,
   });
@@ -141,7 +141,27 @@ const MicrotonalSpiral = () => {
     const getColor = (note, isActive) => {
       if (isActive) return "#ffff00";
 
-      if (colorMode === "interval") {
+      if (colorMode === "piano") {
+        // Traditional piano pattern: alternating white and black keys
+        // In 12-TET: C, D, E, F, G, A, B are white (0,2,4,5,7,9,11)
+        // C#, D#, F#, G#, A# are black (1,3,6,8,10)
+        const pianoPattern12 = [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1]; // 1=white, 0=black
+
+        if (divisions === 12) {
+          return pianoPattern12[note.step] ? "#1a1a1a" : "#f5f5f5";
+        } else {
+          // For other divisions, approximate the pattern
+          const scaledStep = Math.floor((note.step / divisions) * 12);
+          return pianoPattern12[scaledStep] ? "#1a1a1a" : "#f5f5f5";
+        }
+      } else if (colorMode === "alternating") {
+        // Simple alternating black/white pattern
+        return note.step % 2 === 0 ? "#f5f5f5" : "#2a2a2a";
+      } else if (colorMode === "grayscale") {
+        // Grayscale gradient across the octave
+        const brightness = 30 + (note.step / divisions) * 60;
+        return `hsl(0, 0%, ${brightness}%)`;
+      } else if (colorMode === "interval") {
         const hue = (note.step / divisions) * 360;
         return `hsl(${hue}, 70%, 55%)`;
       } else if (colorMode === "octave") {
@@ -183,7 +203,14 @@ const MicrotonalSpiral = () => {
         showLabels &&
         (note.step === 0 || i % Math.max(1, Math.floor(divisions / 6)) === 0)
       ) {
-        ctx.fillStyle = "#000000";
+        // Adjust label color based on key color for better contrast
+        const keyColor = getColor(note, false);
+        const isLightKey =
+          keyColor === "#f5f5f5" ||
+          keyColor.includes("90%") ||
+          keyColor.includes("85%");
+        ctx.fillStyle = isLightKey ? "#000000" : "#ffffff";
+
         ctx.font = "bold 9px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -375,8 +402,11 @@ const MicrotonalSpiral = () => {
               }
               className="w-full p-2 bg-gray-800 text-white rounded"
             >
-              <option value="interval">By Interval Class</option>
-              <option value="octave">By Octave</option>
+              <option value="piano">Piano (Black & White)</option>
+              <option value="alternating">Alternating (B&W)</option>
+              <option value="grayscale">Grayscale Gradient</option>
+              <option value="interval">Rainbow by Interval</option>
+              <option value="octave">Rainbow by Octave</option>
             </select>
           </div>
 
