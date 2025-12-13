@@ -3,8 +3,14 @@ import { Settings, Volume2 } from "lucide-react";
 
 const MicrotonalSpiral = () => {
   const canvasRef = useRef(null);
+  const visualCanvasRef = useRef(null);
   const audioContextRef = useRef(null);
   const [activeNote, setActiveNote] = useState(null);
+  const [activePitchClasses, setActivePitchClasses] = useState([]);
+  const [recentNotes, setRecentNotes] = useState([]);
+  const [keyboardEnabled, setKeyboardEnabled] = useState(false);
+  const [activeOscillators, setActiveOscillators] = useState({});
+  const fadeIntervalRef = useRef(null);
   const [config, setConfig] = useState({
     divisions: 24,
     octaves: 4,
@@ -37,7 +43,12 @@ const MicrotonalSpiral = () => {
     };
   }, []);
 
-  const playNote = (freq, duration = 0.5) => {
+  const playNote = (
+    freq,
+    duration = 0.5,
+    pitchClass = null,
+    sustained = false
+  ) => {
     const ctx = audioContextRef.current;
     if (!ctx) return;
 
@@ -51,16 +62,70 @@ const MicrotonalSpiral = () => {
     oscillator.type = "sine";
 
     gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(
-      0.01,
-      ctx.currentTime + duration
-    );
+
+    if (!sustained) {
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.01,
+        ctx.currentTime + duration
+      );
+    }
 
     oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + duration);
+
+    if (!sustained) {
+      oscillator.stop(ctx.currentTime + duration);
+    }
 
     setActiveNote(freq);
-    setTimeout(() => setActiveNote(null), duration * 1000);
+
+    // Track recent notes for chord detection (within 1 second window)
+    const now = Date.now();
+    setRecentNotes((prev) => {
+      const filtered = prev.filter((n) => now - n.time < 1000);
+      return [...filtered, { pitch: pitchClass, time: now }];
+    });
+
+    // Add new pitch class with full opacity
+    const newPitchClass = {
+      pitch: pitchClass,
+      opacity: 1,
+      id: Date.now() + Math.random(), // Unique ID
+    };
+
+    setActivePitchClasses((prev) => [...prev, newPitchClass]);
+
+    if (!sustained) {
+      setTimeout(() => {
+        setActiveNote(null);
+      }, duration * 1000);
+    }
+
+    // Start fading this specific pitch class after 0.5 seconds
+    setTimeout(() => {
+      const fadeInterval = setInterval(() => {
+        setActivePitchClasses((prev) => {
+          const updated = prev.map((pc) => {
+            if (pc.id === newPitchClass.id) {
+              const newOpacity = pc.opacity - 0.05;
+              return { ...pc, opacity: Math.max(0, newOpacity) };
+            }
+            return pc;
+          });
+
+          // Remove fully faded pitch classes
+          const filtered = updated.filter((pc) => pc.opacity > 0);
+
+          // Clear interval if this pitch class is gone
+          if (!filtered.find((pc) => pc.id === newPitchClass.id)) {
+            clearInterval(fadeInterval);
+          }
+
+          return filtered;
+        });
+      }, 50);
+    }, 500);
+
+    return { oscillator, gainNode };
   };
 
   useEffect(() => {
@@ -148,11 +213,11 @@ const MicrotonalSpiral = () => {
         const pianoPattern12 = [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1]; // 1=white, 0=black
 
         if (divisions === 12) {
-          return pianoPattern12[note.step] ? "#1a1a1a" : "#f5f5f5";
+          return pianoPattern12[note.step] ? "#f5f5f5" : "#1a1a1a";
         } else {
           // For other divisions, approximate the pattern
           const scaledStep = Math.floor((note.step / divisions) * 12);
-          return pianoPattern12[scaledStep] ? "#1a1a1a" : "#f5f5f5";
+          return pianoPattern12[scaledStep] ? "#f5f5f5" : "#1a1a1a";
         }
       } else if (colorMode === "alternating") {
         // Simple alternating black/white pattern
@@ -245,6 +310,216 @@ const MicrotonalSpiral = () => {
     ctx.fillText(`Click keys to play!`, 20, 70);
   }, [config, activeNote]);
 
+  // Keyboard mapping - two rows of keys
+  const keyboardMapping = {
+    // Bottom row (lower octave)
+    z: 0,
+    x: 1,
+    c: 2,
+    v: 3,
+    b: 4,
+    n: 5,
+    m: 6,
+    ",": 7,
+    ".": 8,
+    "/": 9,
+    // Top row (higher octave)
+    a: 12,
+    s: 13,
+    d: 14,
+    f: 15,
+    g: 16,
+    h: 17,
+    j: 18,
+    k: 19,
+    l: 20,
+    ";": 21,
+  };
+
+  // Keyboard event handlers
+  useEffect(() => {
+    if (!keyboardEnabled) return;
+
+    const handleKeyDown = (e) => {
+      if (e.repeat) return; // Ignore key repeats
+
+      const key = e.key.toLowerCase();
+      if (keyboardMapping[key] !== undefined) {
+        e.preventDefault();
+
+        const noteIndex = keyboardMapping[key];
+        if (noteIndex >= notes.length) return;
+
+        const note = notes[noteIndex];
+        const nodes = playNote(note.freq, 0.5, note.step, true);
+
+        if (nodes) {
+          setActiveOscillators((prev) => ({
+            ...prev,
+            [key]: nodes,
+          }));
+        }
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      const key = e.key.toLowerCase();
+      if (activeOscillators[key]) {
+        const { oscillator, gainNode } = activeOscillators[key];
+        const ctx = audioContextRef.current;
+
+        // Fade out
+        gainNode.gain.cancelScheduledValues(ctx.currentTime);
+        gainNode.gain.setValueAtTime(gainNode.gain.value, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+
+        oscillator.stop(ctx.currentTime + 0.1);
+
+        setActiveOscillators((prev) => {
+          const newOsc = { ...prev };
+          delete newOsc[key];
+          return newOsc;
+        });
+
+        setActiveNote(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [keyboardEnabled, notes, activeOscillators]);
+
+  // Draw pitch class visualizer
+  useEffect(() => {
+    const canvas = visualCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(0, 0, width, height);
+
+    const { divisions } = config;
+
+    // Get unique pitch classes from recent notes
+    const now = Date.now();
+    const activeRecentNotes = recentNotes.filter((n) => now - n.time < 1000);
+    const uniquePitches = [...new Set(activeRecentNotes.map((n) => n.pitch))];
+
+    // Draw all pitch class lines (faint)
+    for (let i = 0; i < divisions; i++) {
+      const angle = (i / divisions) * 2 * Math.PI; // Rotated 90 degrees clockwise (removed - Math.PI / 2)
+      const endX =
+        centerX + Math.cos(angle) * (Math.min(width, height) / 2 - 20);
+      const endY =
+        centerY + Math.sin(angle) * (Math.min(width, height) / 2 - 20);
+
+      ctx.strokeStyle = "rgba(100, 100, 100, 0.2)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+
+      // Draw pitch class labels
+      const labelDist = Math.min(width, height) / 2 - 10;
+      const labelX = centerX + Math.cos(angle) * labelDist;
+      const labelY = centerY + Math.sin(angle) * labelDist;
+
+      ctx.fillStyle = "rgba(150, 150, 150, 0.5)";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(i.toString(), labelX, labelY);
+    }
+
+    // Draw chord shape (triangle/polygon) if 3-5 notes are active
+    if (uniquePitches.length >= 3 && uniquePitches.length <= 5) {
+      ctx.beginPath();
+
+      uniquePitches.forEach((pitch, index) => {
+        const angle = (pitch / divisions) * 2 * Math.PI;
+        const endX =
+          centerX + Math.cos(angle) * (Math.min(width, height) / 2 - 20);
+        const endY =
+          centerY + Math.sin(angle) * (Math.min(width, height) / 2 - 20);
+
+        if (index === 0) {
+          ctx.moveTo(endX, endY);
+        } else {
+          ctx.lineTo(endX, endY);
+        }
+      });
+
+      ctx.closePath();
+
+      // Fill with semi-transparent cyan
+      ctx.fillStyle = "rgba(0, 255, 255, 0.15)";
+      ctx.fill();
+
+      // Outline with brighter cyan
+      ctx.strokeStyle = "rgba(0, 255, 255, 0.6)";
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = "rgba(0, 255, 255, 0.8)";
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Draw active pitch class lines
+    activePitchClasses.forEach(({ pitch, opacity }) => {
+      if (pitch === null) return;
+
+      const angle = (pitch / divisions) * 2 * Math.PI;
+      const endX =
+        centerX + Math.cos(angle) * (Math.min(width, height) / 2 - 20);
+      const endY =
+        centerY + Math.sin(angle) * (Math.min(width, height) / 2 - 20);
+
+      // Draw glowing line with opacity
+      ctx.strokeStyle = `rgba(0, 255, 136, ${opacity})`;
+      ctx.lineWidth = 4;
+      ctx.shadowBlur = 20 * opacity;
+      ctx.shadowColor = `rgba(0, 255, 136, ${opacity})`;
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+
+      // Draw end point
+      ctx.shadowBlur = 30 * opacity;
+      ctx.fillStyle = `rgba(0, 255, 136, ${opacity})`;
+      ctx.beginPath();
+      ctx.arc(endX, endY, 6, 0, 2 * Math.PI);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+    });
+
+    // Draw center point
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Draw title
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Pitch Class", centerX, 20);
+    ctx.font = "10px sans-serif";
+    ctx.fillText("Visualizer", centerX, 35);
+  }, [config, activePitchClasses, recentNotes]);
+
   const handleCanvasClick = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -267,7 +542,7 @@ const MicrotonalSpiral = () => {
         Math.abs(localX) < config.keyWidth / 2 &&
         Math.abs(localY) < config.keyHeight / 2
       ) {
-        playNote(note.freq);
+        playNote(note.freq, 0.5, note.step);
         break;
       }
     }
@@ -282,12 +557,23 @@ const MicrotonalSpiral = () => {
             Interactive Microtonal Spiral Piano
           </h1>
         </div>
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
-        >
-          <Settings size={20} />
-        </button>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center text-white text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={keyboardEnabled}
+              onChange={(e) => setKeyboardEnabled(e.target.checked)}
+              className="mr-2"
+            />
+            Enable Keyboard (Polyphonic)
+          </label>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+          >
+            <Settings size={20} />
+          </button>
+        </div>
       </div>
 
       {showSettings && (
@@ -426,14 +712,22 @@ const MicrotonalSpiral = () => {
         </div>
       )}
 
-      <div className="flex-1 flex items-center justify-center p-4">
-        <canvas
-          ref={canvasRef}
-          width={900}
-          height={900}
-          onClick={handleCanvasClick}
-          className="border border-gray-700 rounded cursor-pointer"
-        />
+      <div className="flex-1 flex items-center justify-center p-4 gap-4 overflow-auto">
+        <div className="flex items-center gap-4">
+          <canvas
+            ref={canvasRef}
+            width={700}
+            height={700}
+            onClick={handleCanvasClick}
+            className="border border-gray-700 rounded cursor-pointer flex-shrink-0"
+          />
+          <canvas
+            ref={visualCanvasRef}
+            width={700}
+            height={700}
+            className="border border-gray-700 rounded flex-shrink-0"
+          />
+        </div>
       </div>
 
       <div className="p-4 bg-gray-900 border-t border-gray-800 text-white text-sm">
@@ -446,15 +740,32 @@ const MicrotonalSpiral = () => {
             synthesizer)
           </li>
           <li>
+            <strong>Keyboard Control:</strong> Enable the toggle to play with
+            your computer keyboard
+          </li>
+          <li>
+            <strong>Bottom row (Z-/):</strong> Lower octave notes |{" "}
+            <strong>Top row (A-;):</strong> Higher octave notes
+          </li>
+          <li>
+            <strong>Polyphonic:</strong> Hold multiple keys simultaneously to
+            play chords!
+          </li>
+          <li>
             Keys are arranged in a spiral - one full rotation = one octave
           </li>
           <li>
             Green lines connect octave-equivalent notes (same pitch class)
           </li>
-          <li>Try different tuning systems to hear microtonal intervals!</li>
           <li>
-            Adjust key size and spiral tightness to explore different layouts
+            <strong>Pitch Class Visualizer</strong> (right) shows the active
+            note's position in the octave
           </li>
+          <li>
+            <strong>Play 3-5 notes together</strong> to see a glowing geometric
+            shape!
+          </li>
+          <li>Try different tuning systems to hear microtonal intervals!</li>
         </ul>
       </div>
     </div>
