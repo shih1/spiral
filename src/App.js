@@ -7,10 +7,10 @@ const MicrotonalSpiral = () => {
   const audioContextRef = useRef(null);
   const [activeNote, setActiveNote] = useState(null);
   const [activePitchClasses, setActivePitchClasses] = useState([]);
-  const [recentNotes, setRecentNotes] = useState([]);
+  const [heldNotes, setHeldNotes] = useState([]); // Notes currently being held
+  const [releasedNotes, setReleasedNotes] = useState([]); // Notes in release phase
   const [keyboardEnabled, setKeyboardEnabled] = useState(false);
   const [activeOscillators, setActiveOscillators] = useState({});
-  const fadeIntervalRef = useRef(null);
   const [config, setConfig] = useState({
     divisions: 24,
     octaves: 4,
@@ -20,6 +20,7 @@ const MicrotonalSpiral = () => {
     colorMode: "piano",
     keyWidth: 35,
     keyHeight: 80,
+    releaseTime: 2000, // milliseconds
   });
   const [showSettings, setShowSettings] = useState(false);
   const [notes, setNotes] = useState([]);
@@ -78,18 +79,29 @@ const MicrotonalSpiral = () => {
 
     setActiveNote(freq);
 
-    // Track recent notes for chord detection (within 1 second window)
     const now = Date.now();
-    setRecentNotes((prev) => {
-      const filtered = prev.filter((n) => now - n.time < 1000);
-      return [...filtered, { pitch: pitchClass, time: now }];
-    });
+    const noteId = Date.now() + Math.random();
+
+    if (sustained) {
+      // Add to held notes (will stay until released)
+      setHeldNotes((prev) => [
+        ...prev,
+        { pitch: pitchClass, time: now, id: noteId },
+      ]);
+    } else {
+      // For click events, immediately add to released notes
+      setReleasedNotes((prev) => [
+        ...prev,
+        { pitch: pitchClass, time: now, id: noteId },
+      ]);
+    }
 
     // Add new pitch class with full opacity
     const newPitchClass = {
       pitch: pitchClass,
       opacity: 1,
-      id: Date.now() + Math.random(), // Unique ID
+      id: noteId,
+      sustained: sustained,
     };
 
     setActivePitchClasses((prev) => [...prev, newPitchClass]);
@@ -100,13 +112,30 @@ const MicrotonalSpiral = () => {
       }, duration * 1000);
     }
 
-    // Start fading this specific pitch class after 0.5 seconds
+    return { oscillator, gainNode, id: noteId };
+  };
+
+  const releaseNote = (noteId, pitchClass) => {
+    const now = Date.now();
+
+    // Move from held to released
+    setHeldNotes((prev) => prev.filter((n) => n.id !== noteId));
+    setReleasedNotes((prev) => [
+      ...prev,
+      { pitch: pitchClass, time: now, id: noteId },
+    ]);
+
+    // Start fading this specific pitch class
+    const fadeStartDelay = Math.min(500, config.releaseTime * 0.25);
+    const fadeDuration = config.releaseTime - fadeStartDelay;
+    const fadeSteps = fadeDuration / 50; // 50ms per step
+
     setTimeout(() => {
       const fadeInterval = setInterval(() => {
         setActivePitchClasses((prev) => {
           const updated = prev.map((pc) => {
-            if (pc.id === newPitchClass.id) {
-              const newOpacity = pc.opacity - 0.05;
+            if (pc.id === noteId) {
+              const newOpacity = pc.opacity - 1 / fadeSteps;
               return { ...pc, opacity: Math.max(0, newOpacity) };
             }
             return pc;
@@ -116,16 +145,14 @@ const MicrotonalSpiral = () => {
           const filtered = updated.filter((pc) => pc.opacity > 0);
 
           // Clear interval if this pitch class is gone
-          if (!filtered.find((pc) => pc.id === newPitchClass.id)) {
+          if (!filtered.find((pc) => pc.id === noteId)) {
             clearInterval(fadeInterval);
           }
 
           return filtered;
         });
       }, 50);
-    }, 500);
-
-    return { oscillator, gainNode };
+    }, fadeStartDelay);
   };
 
   useEffect(() => {
@@ -365,15 +392,22 @@ const MicrotonalSpiral = () => {
     const handleKeyUp = (e) => {
       const key = e.key.toLowerCase();
       if (activeOscillators[key]) {
-        const { oscillator, gainNode } = activeOscillators[key];
+        const { oscillator, gainNode, id } = activeOscillators[key];
         const ctx = audioContextRef.current;
 
-        // Fade out
+        // Get pitch class from the note
+        const noteIndex = keyboardMapping[key];
+        const note = notes[noteIndex];
+
+        // Fade out audio
         gainNode.gain.cancelScheduledValues(ctx.currentTime);
         gainNode.gain.setValueAtTime(gainNode.gain.value, ctx.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
 
         oscillator.stop(ctx.currentTime + 0.1);
+
+        // Trigger visual release
+        releaseNote(id, note.step);
 
         setActiveOscillators((prev) => {
           const newOsc = { ...prev };
@@ -410,14 +444,19 @@ const MicrotonalSpiral = () => {
 
     const { divisions } = config;
 
-    // Get unique pitch classes from recent notes
+    // Get unique pitch classes from held notes + released notes within release time
     const now = Date.now();
-    const activeRecentNotes = recentNotes.filter((n) => now - n.time < 1000);
-    const uniquePitches = [...new Set(activeRecentNotes.map((n) => n.pitch))];
+    const activeReleasedNotes = releasedNotes.filter(
+      (n) => now - n.time < config.releaseTime
+    );
+
+    // Combine held and recently released notes
+    const allActiveNotes = [...heldNotes, ...activeReleasedNotes];
+    const uniquePitches = [...new Set(allActiveNotes.map((n) => n.pitch))];
 
     // Draw all pitch class lines (faint)
     for (let i = 0; i < divisions; i++) {
-      const angle = (i / divisions) * 2 * Math.PI; // Rotated 90 degrees clockwise (removed - Math.PI / 2)
+      const angle = (i / divisions) * 2 * Math.PI;
       const endX =
         centerX + Math.cos(angle) * (Math.min(width, height) / 2 - 20);
       const endY =
@@ -442,8 +481,8 @@ const MicrotonalSpiral = () => {
       ctx.fillText(i.toString(), labelX, labelY);
     }
 
-    // Draw chord shape (triangle/polygon) if 3-5 notes are active
-    if (uniquePitches.length >= 3 && uniquePitches.length <= 5) {
+    // Draw chord shape (polygon) if 2+ notes are active
+    if (uniquePitches.length >= 2) {
       ctx.beginPath();
 
       uniquePitches.forEach((pitch, index) => {
@@ -476,7 +515,7 @@ const MicrotonalSpiral = () => {
     }
 
     // Draw active pitch class lines
-    activePitchClasses.forEach(({ pitch, opacity }) => {
+    activePitchClasses.forEach(({ pitch, opacity, sustained }) => {
       if (pitch === null) return;
 
       const angle = (pitch / divisions) * 2 * Math.PI;
@@ -485,11 +524,14 @@ const MicrotonalSpiral = () => {
       const endY =
         centerY + Math.sin(angle) * (Math.min(width, height) / 2 - 20);
 
+      // All notes use green color
+      const color = [0, 255, 136];
+
       // Draw glowing line with opacity
-      ctx.strokeStyle = `rgba(0, 255, 136, ${opacity})`;
+      ctx.strokeStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${opacity})`;
       ctx.lineWidth = 4;
       ctx.shadowBlur = 20 * opacity;
-      ctx.shadowColor = `rgba(0, 255, 136, ${opacity})`;
+      ctx.shadowColor = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${opacity})`;
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
       ctx.lineTo(endX, endY);
@@ -497,7 +539,7 @@ const MicrotonalSpiral = () => {
 
       // Draw end point
       ctx.shadowBlur = 30 * opacity;
-      ctx.fillStyle = `rgba(0, 255, 136, ${opacity})`;
+      ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${opacity})`;
       ctx.beginPath();
       ctx.arc(endX, endY, 6, 0, 2 * Math.PI);
       ctx.fill();
@@ -518,7 +560,7 @@ const MicrotonalSpiral = () => {
     ctx.fillText("Pitch Class", centerX, 20);
     ctx.font = "10px sans-serif";
     ctx.fillText("Visualizer", centerX, 35);
-  }, [config, activePitchClasses, recentNotes]);
+  }, [config, activePitchClasses, heldNotes, releasedNotes]);
 
   const handleCanvasClick = (e) => {
     const canvas = canvasRef.current;
@@ -542,7 +584,14 @@ const MicrotonalSpiral = () => {
         Math.abs(localX) < config.keyWidth / 2 &&
         Math.abs(localY) < config.keyHeight / 2
       ) {
-        playNote(note.freq, 0.5, note.step);
+        const nodes = playNote(note.freq, 0.5, note.step, false);
+
+        // For click events, immediately trigger release after a short delay
+        if (nodes) {
+          setTimeout(() => {
+            releaseNote(nodes.id, note.step);
+          }, 500);
+        }
         break;
       }
     }
@@ -680,6 +729,23 @@ const MicrotonalSpiral = () => {
           </div>
 
           <div>
+            <label className="text-white text-sm block mb-1">
+              Release Time: {(config.releaseTime / 1000).toFixed(1)}s
+            </label>
+            <input
+              type="range"
+              min="500"
+              max="5000"
+              step="100"
+              value={config.releaseTime}
+              onChange={(e) =>
+                setConfig({ ...config, releaseTime: parseInt(e.target.value) })
+              }
+              className="w-full"
+            />
+          </div>
+
+          <div>
             <label className="text-white text-sm block mb-1">Color Mode</label>
             <select
               value={config.colorMode}
@@ -758,12 +824,16 @@ const MicrotonalSpiral = () => {
             Green lines connect octave-equivalent notes (same pitch class)
           </li>
           <li>
-            <strong>Pitch Class Visualizer</strong> (right) shows the active
-            note's position in the octave
+            <strong>Pitch Class Visualizer:</strong> Green lines show active
+            notes (bright when held, fading after release)
           </li>
           <li>
-            <strong>Play 3-5 notes together</strong> to see a glowing geometric
-            shape!
+            <strong>Release Time:</strong> Controls how long notes remain
+            visible after release
+          </li>
+          <li>
+            <strong>Hold notes</strong> to build chords, then release to see
+            them fade over the release time!
           </li>
           <li>Try different tuning systems to hear microtonal intervals!</li>
         </ul>
