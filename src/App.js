@@ -1,39 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Settings, Volume2 } from "lucide-react";
 
-const MicrotonalSpiral = () => {
-  const canvasRef = useRef(null);
-  const visualCanvasRef = useRef(null);
+// ============================================================================
+// AUDIO ENGINE
+// ============================================================================
+const useAudioEngine = () => {
   const audioContextRef = useRef(null);
-  const [activeNote, setActiveNote] = useState(null);
-  const [activePitchClasses, setActivePitchClasses] = useState([]);
-  const [heldNotes, setHeldNotes] = useState([]); // Notes currently being held
-  const [releasedNotes, setReleasedNotes] = useState([]); // Notes in release phase
-  const [keyboardEnabled, setKeyboardEnabled] = useState(false);
-  const [activeOscillators, setActiveOscillators] = useState({});
-  const [config, setConfig] = useState({
-    divisions: 24,
-    octaves: 4,
-    baseFreq: 440,
-    spiralTightness: 0.3,
-    showLabels: true,
-    colorMode: "piano",
-    keyWidth: 35,
-    keyHeight: 80,
-    releaseTime: 2000, // milliseconds
-  });
-  const [showSettings, setShowSettings] = useState(false);
-  const [notes, setNotes] = useState([]);
 
-  const presets = {
-    "12-TET": 12,
-    "19-TET": 19,
-    "24-TET": 24,
-    "31-TET": 31,
-    "53-TET": 53,
-  };
-
-  // Initialize Web Audio API
   useEffect(() => {
     audioContextRef.current = new (window.AudioContext ||
       window.webkitAudioContext)();
@@ -44,14 +17,9 @@ const MicrotonalSpiral = () => {
     };
   }, []);
 
-  const playNote = (
-    freq,
-    duration = 0.5,
-    pitchClass = null,
-    sustained = false
-  ) => {
+  const playNote = (freq, duration = 0.5, sustained = false) => {
     const ctx = audioContextRef.current;
-    if (!ctx) return;
+    if (!ctx) return null;
 
     const oscillator = ctx.createOscillator();
     const gainNode = ctx.createGain();
@@ -61,7 +29,6 @@ const MicrotonalSpiral = () => {
 
     oscillator.frequency.value = freq;
     oscillator.type = "sine";
-
     gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
 
     if (!sustained) {
@@ -72,88 +39,37 @@ const MicrotonalSpiral = () => {
     }
 
     oscillator.start(ctx.currentTime);
-
     if (!sustained) {
       oscillator.stop(ctx.currentTime + duration);
     }
 
-    setActiveNote(freq);
-
-    const now = Date.now();
-    const noteId = Date.now() + Math.random();
-
-    if (sustained) {
-      // Add to held notes (will stay until released)
-      setHeldNotes((prev) => [
-        ...prev,
-        { pitch: pitchClass, time: now, id: noteId },
-      ]);
-    } else {
-      // For click events, immediately add to released notes
-      setReleasedNotes((prev) => [
-        ...prev,
-        { pitch: pitchClass, time: now, id: noteId },
-      ]);
-    }
-
-    // Add new pitch class with full opacity
-    const newPitchClass = {
-      pitch: pitchClass,
-      opacity: 1,
-      id: noteId,
-      sustained: sustained,
-    };
-
-    setActivePitchClasses((prev) => [...prev, newPitchClass]);
-
-    if (!sustained) {
-      setTimeout(() => {
-        setActiveNote(null);
-      }, duration * 1000);
-    }
-
-    return { oscillator, gainNode, id: noteId };
+    return { oscillator, gainNode, id: Date.now() + Math.random() };
   };
 
-  const releaseNote = (noteId, pitchClass) => {
-    const now = Date.now();
+  const stopNote = (oscillator, gainNode) => {
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
 
-    // Move from held to released
-    setHeldNotes((prev) => prev.filter((n) => n.id !== noteId));
-    setReleasedNotes((prev) => [
-      ...prev,
-      { pitch: pitchClass, time: now, id: noteId },
-    ]);
-
-    // Start fading this specific pitch class
-    const fadeStartDelay = Math.min(500, config.releaseTime * 0.25);
-    const fadeDuration = config.releaseTime - fadeStartDelay;
-    const fadeSteps = fadeDuration / 50; // 50ms per step
-
-    setTimeout(() => {
-      const fadeInterval = setInterval(() => {
-        setActivePitchClasses((prev) => {
-          const updated = prev.map((pc) => {
-            if (pc.id === noteId) {
-              const newOpacity = pc.opacity - 1 / fadeSteps;
-              return { ...pc, opacity: Math.max(0, newOpacity) };
-            }
-            return pc;
-          });
-
-          // Remove fully faded pitch classes
-          const filtered = updated.filter((pc) => pc.opacity > 0);
-
-          // Clear interval if this pitch class is gone
-          if (!filtered.find((pc) => pc.id === noteId)) {
-            clearInterval(fadeInterval);
-          }
-
-          return filtered;
-        });
-      }, 50);
-    }, fadeStartDelay);
+    gainNode.gain.cancelScheduledValues(ctx.currentTime);
+    gainNode.gain.setValueAtTime(gainNode.gain.value, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+    oscillator.stop(ctx.currentTime + 0.1);
   };
+
+  return { playNote, stopNote };
+};
+
+// ============================================================================
+// SPIRAL KEYBOARD CANVAS
+// ============================================================================
+const SpiralKeyboard = ({
+  config,
+  activeNote,
+  notes,
+  setNotes,
+  onNoteClick,
+}) => {
+  const canvasRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -179,22 +95,17 @@ const MicrotonalSpiral = () => {
       keyHeight,
     } = config;
     const totalNotes = divisions * octaves;
-
     const calculatedNotes = [];
 
+    // Calculate note positions
     for (let i = 0; i < totalNotes; i++) {
       const octave = Math.floor(i / divisions);
       const step = i % divisions;
-
       const semitoneRatio = i / divisions;
       const freq = baseFreq * Math.pow(2, semitoneRatio);
-
-      // Logarithmic radius
       const baseR = 80 + Math.log2(freq / baseFreq) * 60;
       const theta = (i / divisions) * 2 * Math.PI;
       const spiralR = baseR + theta * spiralTightness * 15;
-
-      // Calculate rectangular key position in polar coordinates
       const x = centerX + spiralR * Math.cos(theta);
       const y = centerY + spiralR * Math.sin(theta);
 
@@ -234,23 +145,16 @@ const MicrotonalSpiral = () => {
       if (isActive) return "#ffff00";
 
       if (colorMode === "piano") {
-        // Traditional piano pattern: alternating white and black keys
-        // In 12-TET: C, D, E, F, G, A, B are white (0,2,4,5,7,9,11)
-        // C#, D#, F#, G#, A# are black (1,3,6,8,10)
-        const pianoPattern12 = [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1]; // 1=white, 0=black
-
+        const pianoPattern12 = [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1];
         if (divisions === 12) {
           return pianoPattern12[note.step] ? "#f5f5f5" : "#1a1a1a";
         } else {
-          // For other divisions, approximate the pattern
           const scaledStep = Math.floor((note.step / divisions) * 12);
           return pianoPattern12[scaledStep] ? "#f5f5f5" : "#1a1a1a";
         }
       } else if (colorMode === "alternating") {
-        // Simple alternating black/white pattern
         return note.step % 2 === 0 ? "#f5f5f5" : "#2a2a2a";
       } else if (colorMode === "grayscale") {
-        // Grayscale gradient across the octave
         const brightness = 30 + (note.step / divisions) * 60;
         return `hsl(0, 0%, ${brightness}%)`;
       } else if (colorMode === "interval") {
@@ -263,26 +167,23 @@ const MicrotonalSpiral = () => {
       return "#6699ff";
     };
 
-    // Draw piano-like rectangular keys
+    // Draw keys
     calculatedNotes.forEach((note, i) => {
       const isActive = activeNote === note.freq;
 
       ctx.save();
       ctx.translate(note.x, note.y);
-      ctx.rotate(note.angle + Math.PI / 2); // Rotate to align radially
+      ctx.rotate(note.angle + Math.PI / 2);
 
-      // Draw rectangular key
       const w = keyWidth;
       const h = keyHeight;
 
-      // Key body
       ctx.fillStyle = getColor(note, isActive);
       ctx.strokeStyle = isActive ? "#ffffff" : "#222222";
       ctx.lineWidth = 2;
       ctx.fillRect(-w / 2, -h / 2, w, h);
       ctx.strokeRect(-w / 2, -h / 2, w, h);
 
-      // Add gradient for 3D effect
       const gradient = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
       gradient.addColorStop(0, "rgba(255, 255, 255, 0.2)");
       gradient.addColorStop(0.5, "rgba(255, 255, 255, 0)");
@@ -290,19 +191,16 @@ const MicrotonalSpiral = () => {
       ctx.fillStyle = gradient;
       ctx.fillRect(-w / 2, -h / 2, w, h);
 
-      // Labels
       if (
         showLabels &&
         (note.step === 0 || i % Math.max(1, Math.floor(divisions / 6)) === 0)
       ) {
-        // Adjust label color based on key color for better contrast
         const keyColor = getColor(note, false);
         const isLightKey =
           keyColor === "#f5f5f5" ||
           keyColor.includes("90%") ||
           keyColor.includes("85%");
         ctx.fillStyle = isLightKey ? "#000000" : "#ffffff";
-
         ctx.font = "bold 9px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -335,102 +233,56 @@ const MicrotonalSpiral = () => {
       50
     );
     ctx.fillText(`Click keys to play!`, 20, 70);
-  }, [config, activeNote]);
+  }, [config, activeNote, setNotes]);
 
-  // Keyboard mapping - two rows of keys
-  const keyboardMapping = {
-    // Bottom row (lower octave)
-    z: 0,
-    x: 1,
-    c: 2,
-    v: 3,
-    b: 4,
-    n: 5,
-    m: 6,
-    ",": 7,
-    ".": 8,
-    "/": 9,
-    // Top row (higher octave)
-    a: 12,
-    s: 13,
-    d: 14,
-    f: 15,
-    g: 16,
-    h: 17,
-    j: 18,
-    k: 19,
-    l: 20,
-    ";": 21,
+  const handleClick = (e) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    for (const note of notes) {
+      const dx = x - note.x;
+      const dy = y - note.y;
+      const cos = Math.cos(-(note.angle + Math.PI / 2));
+      const sin = Math.sin(-(note.angle + Math.PI / 2));
+      const localX = dx * cos - dy * sin;
+      const localY = dx * sin + dy * cos;
+
+      if (
+        Math.abs(localX) < config.keyWidth / 2 &&
+        Math.abs(localY) < config.keyHeight / 2
+      ) {
+        onNoteClick(note);
+        break;
+      }
+    }
   };
 
-  // Keyboard event handlers
+  return (
+    <canvas
+      ref={canvasRef}
+      width={700}
+      height={700}
+      onClick={handleClick}
+      className="border border-gray-700 rounded cursor-pointer flex-shrink-0"
+    />
+  );
+};
+
+// ============================================================================
+// PITCH CLASS VISUALIZER
+// ============================================================================
+const PitchClassVisualizer = ({
+  config,
+  activePitchClasses,
+  heldNotes,
+  releasedNotes,
+}) => {
+  const canvasRef = useRef(null);
+
   useEffect(() => {
-    if (!keyboardEnabled) return;
-
-    const handleKeyDown = (e) => {
-      if (e.repeat) return; // Ignore key repeats
-
-      const key = e.key.toLowerCase();
-      if (keyboardMapping[key] !== undefined) {
-        e.preventDefault();
-
-        const noteIndex = keyboardMapping[key];
-        if (noteIndex >= notes.length) return;
-
-        const note = notes[noteIndex];
-        const nodes = playNote(note.freq, 0.5, note.step, true);
-
-        if (nodes) {
-          setActiveOscillators((prev) => ({
-            ...prev,
-            [key]: nodes,
-          }));
-        }
-      }
-    };
-
-    const handleKeyUp = (e) => {
-      const key = e.key.toLowerCase();
-      if (activeOscillators[key]) {
-        const { oscillator, gainNode, id } = activeOscillators[key];
-        const ctx = audioContextRef.current;
-
-        // Get pitch class from the note
-        const noteIndex = keyboardMapping[key];
-        const note = notes[noteIndex];
-
-        // Fade out audio
-        gainNode.gain.cancelScheduledValues(ctx.currentTime);
-        gainNode.gain.setValueAtTime(gainNode.gain.value, ctx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-
-        oscillator.stop(ctx.currentTime + 0.1);
-
-        // Trigger visual release
-        releaseNote(id, note.step);
-
-        setActiveOscillators((prev) => {
-          const newOsc = { ...prev };
-          delete newOsc[key];
-          return newOsc;
-        });
-
-        setActiveNote(null);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [keyboardEnabled, notes, activeOscillators]);
-
-  // Draw pitch class visualizer
-  useEffect(() => {
-    const canvas = visualCanvasRef.current;
+    const canvas = canvasRef.current;
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
@@ -443,18 +295,14 @@ const MicrotonalSpiral = () => {
     ctx.fillRect(0, 0, width, height);
 
     const { divisions } = config;
-
-    // Get unique pitch classes from held notes + released notes within release time
     const now = Date.now();
     const activeReleasedNotes = releasedNotes.filter(
       (n) => now - n.time < config.releaseTime
     );
-
-    // Combine held and recently released notes
     const allActiveNotes = [...heldNotes, ...activeReleasedNotes];
     const uniquePitches = [...new Set(allActiveNotes.map((n) => n.pitch))];
 
-    // Draw all pitch class lines (faint)
+    // Draw pitch class grid
     for (let i = 0; i < divisions; i++) {
       const angle = (i / divisions) * 2 * Math.PI;
       const endX =
@@ -469,7 +317,6 @@ const MicrotonalSpiral = () => {
       ctx.lineTo(endX, endY);
       ctx.stroke();
 
-      // Draw pitch class labels
       const labelDist = Math.min(width, height) / 2 - 10;
       const labelX = centerX + Math.cos(angle) * labelDist;
       const labelY = centerY + Math.sin(angle) * labelDist;
@@ -481,31 +328,24 @@ const MicrotonalSpiral = () => {
       ctx.fillText(i.toString(), labelX, labelY);
     }
 
-    // Draw chord shape (polygon) if 2+ notes are active
+    // Draw chord shape
     if (uniquePitches.length >= 2) {
       ctx.beginPath();
-
       uniquePitches.forEach((pitch, index) => {
         const angle = (pitch / divisions) * 2 * Math.PI;
         const endX =
           centerX + Math.cos(angle) * (Math.min(width, height) / 2 - 20);
         const endY =
           centerY + Math.sin(angle) * (Math.min(width, height) / 2 - 20);
-
         if (index === 0) {
           ctx.moveTo(endX, endY);
         } else {
           ctx.lineTo(endX, endY);
         }
       });
-
       ctx.closePath();
-
-      // Fill with semi-transparent cyan
       ctx.fillStyle = "rgba(0, 255, 255, 0.15)";
       ctx.fill();
-
-      // Outline with brighter cyan
       ctx.strokeStyle = "rgba(0, 255, 255, 0.6)";
       ctx.lineWidth = 2;
       ctx.shadowBlur = 15;
@@ -514,8 +354,8 @@ const MicrotonalSpiral = () => {
       ctx.shadowBlur = 0;
     }
 
-    // Draw active pitch class lines
-    activePitchClasses.forEach(({ pitch, opacity, sustained }) => {
+    // Draw active pitch classes
+    activePitchClasses.forEach(({ pitch, opacity }) => {
       if (pitch === null) return;
 
       const angle = (pitch / divisions) * 2 * Math.PI;
@@ -524,10 +364,8 @@ const MicrotonalSpiral = () => {
       const endY =
         centerY + Math.sin(angle) * (Math.min(width, height) / 2 - 20);
 
-      // All notes use green color
       const color = [0, 255, 136];
 
-      // Draw glowing line with opacity
       ctx.strokeStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${opacity})`;
       ctx.lineWidth = 4;
       ctx.shadowBlur = 20 * opacity;
@@ -537,13 +375,11 @@ const MicrotonalSpiral = () => {
       ctx.lineTo(endX, endY);
       ctx.stroke();
 
-      // Draw end point
       ctx.shadowBlur = 30 * opacity;
       ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${opacity})`;
       ctx.beginPath();
       ctx.arc(endX, endY, 6, 0, 2 * Math.PI);
       ctx.fill();
-
       ctx.shadowBlur = 0;
     });
 
@@ -553,7 +389,7 @@ const MicrotonalSpiral = () => {
     ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
     ctx.fill();
 
-    // Draw title
+    // Title
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 14px sans-serif";
     ctx.textAlign = "center";
@@ -562,40 +398,338 @@ const MicrotonalSpiral = () => {
     ctx.fillText("Visualizer", centerX, 35);
   }, [config, activePitchClasses, heldNotes, releasedNotes]);
 
-  const handleCanvasClick = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  return (
+    <canvas
+      ref={canvasRef}
+      width={700}
+      height={700}
+      className="border border-gray-700 rounded flex-shrink-0"
+    />
+  );
+};
 
-    // Check if click is on any note
-    for (const note of notes) {
-      const dx = x - note.x;
-      const dy = y - note.y;
+// ============================================================================
+// SETTINGS PANEL
+// ============================================================================
+const SettingsPanel = ({ config, setConfig, presets }) => {
+  return (
+    <div className="p-4 bg-gray-900 border-b border-gray-800 grid grid-cols-2 gap-4">
+      <div>
+        <label className="text-white text-sm block mb-1">
+          Tuning System (TET)
+        </label>
+        <select
+          value={config.divisions}
+          onChange={(e) =>
+            setConfig({ ...config, divisions: parseInt(e.target.value) })
+          }
+          className="w-full p-2 bg-gray-800 text-white rounded"
+        >
+          {Object.entries(presets).map(([name, value]) => (
+            <option key={value} value={value}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      // Transform to key's local coordinate system
-      const cos = Math.cos(-(note.angle + Math.PI / 2));
-      const sin = Math.sin(-(note.angle + Math.PI / 2));
-      const localX = dx * cos - dy * sin;
-      const localY = dx * sin + dy * cos;
+      <div>
+        <label className="text-white text-sm block mb-1">
+          Octaves: {config.octaves}
+        </label>
+        <input
+          type="range"
+          min="2"
+          max="6"
+          value={config.octaves}
+          onChange={(e) =>
+            setConfig({ ...config, octaves: parseInt(e.target.value) })
+          }
+          className="w-full"
+        />
+      </div>
 
-      // Check if click is within rectangular key bounds
-      if (
-        Math.abs(localX) < config.keyWidth / 2 &&
-        Math.abs(localY) < config.keyHeight / 2
-      ) {
-        const nodes = playNote(note.freq, 0.5, note.step, false);
+      <div>
+        <label className="text-white text-sm block mb-1">
+          Base Frequency (Hz)
+        </label>
+        <input
+          type="number"
+          value={config.baseFreq}
+          onChange={(e) =>
+            setConfig({ ...config, baseFreq: parseFloat(e.target.value) })
+          }
+          className="w-full p-2 bg-gray-800 text-white rounded"
+        />
+      </div>
 
-        // For click events, immediately trigger release after a short delay
-        if (nodes) {
-          setTimeout(() => {
-            releaseNote(nodes.id, note.step);
-          }, 500);
-        }
-        break;
-      }
-    }
+      <div>
+        <label className="text-white text-sm block mb-1">
+          Spiral Tightness: {config.spiralTightness.toFixed(1)}
+        </label>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.1"
+          value={config.spiralTightness}
+          onChange={(e) =>
+            setConfig({
+              ...config,
+              spiralTightness: parseFloat(e.target.value),
+            })
+          }
+          className="w-full"
+        />
+      </div>
+
+      <div>
+        <label className="text-white text-sm block mb-1">
+          Key Width: {config.keyWidth}
+        </label>
+        <input
+          type="range"
+          min="20"
+          max="50"
+          value={config.keyWidth}
+          onChange={(e) =>
+            setConfig({ ...config, keyWidth: parseInt(e.target.value) })
+          }
+          className="w-full"
+        />
+      </div>
+
+      <div>
+        <label className="text-white text-sm block mb-1">
+          Key Height: {config.keyHeight}
+        </label>
+        <input
+          type="range"
+          min="50"
+          max="120"
+          value={config.keyHeight}
+          onChange={(e) =>
+            setConfig({ ...config, keyHeight: parseInt(e.target.value) })
+          }
+          className="w-full"
+        />
+      </div>
+
+      <div>
+        <label className="text-white text-sm block mb-1">
+          Release Time: {(config.releaseTime / 1000).toFixed(1)}s
+        </label>
+        <input
+          type="range"
+          min="500"
+          max="5000"
+          step="100"
+          value={config.releaseTime}
+          onChange={(e) =>
+            setConfig({ ...config, releaseTime: parseInt(e.target.value) })
+          }
+          className="w-full"
+        />
+      </div>
+
+      <div>
+        <label className="text-white text-sm block mb-1">Color Mode</label>
+        <select
+          value={config.colorMode}
+          onChange={(e) => setConfig({ ...config, colorMode: e.target.value })}
+          className="w-full p-2 bg-gray-800 text-white rounded"
+        >
+          <option value="piano">Piano (Black & White)</option>
+          <option value="alternating">Alternating (B&W)</option>
+          <option value="grayscale">Grayscale Gradient</option>
+          <option value="interval">Rainbow by Interval</option>
+          <option value="octave">Rainbow by Octave</option>
+        </select>
+      </div>
+
+      <div className="flex items-end">
+        <label className="flex items-center text-white text-sm">
+          <input
+            type="checkbox"
+            checked={config.showLabels}
+            onChange={(e) =>
+              setConfig({ ...config, showLabels: e.target.checked })
+            }
+            className="mr-2"
+          />
+          Show Labels
+        </label>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// MAIN APP
+// ============================================================================
+const MicrotonalSpiral = () => {
+  const [activeNote, setActiveNote] = useState(null);
+  const [activePitchClasses, setActivePitchClasses] = useState([]);
+  const [heldNotes, setHeldNotes] = useState([]);
+  const [releasedNotes, setReleasedNotes] = useState([]);
+  const [keyboardEnabled, setKeyboardEnabled] = useState(false);
+  const [activeOscillators, setActiveOscillators] = useState({});
+  const [showSettings, setShowSettings] = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [config, setConfig] = useState({
+    divisions: 24,
+    octaves: 4,
+    baseFreq: 440,
+    spiralTightness: 0.3,
+    showLabels: true,
+    colorMode: "piano",
+    keyWidth: 35,
+    keyHeight: 80,
+    releaseTime: 2000,
+  });
+
+  const presets = {
+    "12-TET": 12,
+    "19-TET": 19,
+    "24-TET": 24,
+    "31-TET": 31,
+    "53-TET": 53,
   };
+  const { playNote, stopNote } = useAudioEngine();
+
+  const keyboardMapping = {
+    z: 0,
+    x: 1,
+    c: 2,
+    v: 3,
+    b: 4,
+    n: 5,
+    m: 6,
+    ",": 7,
+    ".": 8,
+    "/": 9,
+    a: 12,
+    s: 13,
+    d: 14,
+    f: 15,
+    g: 16,
+    h: 17,
+    j: 18,
+    k: 19,
+    l: 20,
+    ";": 21,
+  };
+
+  const handleNotePlay = (note, sustained = false) => {
+    const nodes = playNote(note.freq, 0.5, sustained);
+    if (!nodes) return null;
+
+    const now = Date.now();
+    const noteId = nodes.id;
+
+    setActiveNote(note.freq);
+
+    if (sustained) {
+      setHeldNotes((prev) => [
+        ...prev,
+        { pitch: note.step, time: now, id: noteId },
+      ]);
+    } else {
+      setReleasedNotes((prev) => [
+        ...prev,
+        { pitch: note.step, time: now, id: noteId },
+      ]);
+    }
+
+    const newPitchClass = {
+      pitch: note.step,
+      opacity: 1,
+      id: noteId,
+      sustained,
+    };
+    setActivePitchClasses((prev) => [...prev, newPitchClass]);
+
+    if (!sustained) {
+      setTimeout(() => setActiveNote(null), 500);
+      setTimeout(() => releaseNote(noteId, note.step), 500);
+    }
+
+    return nodes;
+  };
+
+  const releaseNote = (noteId, pitchClass) => {
+    const now = Date.now();
+    setHeldNotes((prev) => prev.filter((n) => n.id !== noteId));
+    setReleasedNotes((prev) => [
+      ...prev,
+      { pitch: pitchClass, time: now, id: noteId },
+    ]);
+
+    const fadeStartDelay = Math.min(500, config.releaseTime * 0.25);
+    const fadeDuration = config.releaseTime - fadeStartDelay;
+    const fadeSteps = fadeDuration / 50;
+
+    setTimeout(() => {
+      const fadeInterval = setInterval(() => {
+        setActivePitchClasses((prev) => {
+          const updated = prev.map((pc) =>
+            pc.id === noteId
+              ? { ...pc, opacity: Math.max(0, pc.opacity - 1 / fadeSteps) }
+              : pc
+          );
+          const filtered = updated.filter((pc) => pc.opacity > 0);
+          if (!filtered.find((pc) => pc.id === noteId)) {
+            clearInterval(fadeInterval);
+          }
+          return filtered;
+        });
+      }, 50);
+    }, fadeStartDelay);
+  };
+
+  // Keyboard event handlers
+  useEffect(() => {
+    if (!keyboardEnabled) return;
+
+    const handleKeyDown = (e) => {
+      if (e.repeat) return;
+      const key = e.key.toLowerCase();
+      if (keyboardMapping[key] !== undefined) {
+        e.preventDefault();
+        const noteIndex = keyboardMapping[key];
+        if (noteIndex >= notes.length) return;
+        const note = notes[noteIndex];
+        const nodes = handleNotePlay(note, true);
+        if (nodes) {
+          setActiveOscillators((prev) => ({ ...prev, [key]: nodes }));
+        }
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      const key = e.key.toLowerCase();
+      if (activeOscillators[key]) {
+        const { oscillator, gainNode, id } = activeOscillators[key];
+        const noteIndex = keyboardMapping[key];
+        const note = notes[noteIndex];
+        stopNote(oscillator, gainNode);
+        releaseNote(id, note.step);
+        setActiveOscillators((prev) => {
+          const newOsc = { ...prev };
+          delete newOsc[key];
+          return newOsc;
+        });
+        setActiveNote(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [keyboardEnabled, notes, activeOscillators]);
 
   return (
     <div className="w-full h-full bg-gray-950 flex flex-col">
@@ -626,172 +760,27 @@ const MicrotonalSpiral = () => {
       </div>
 
       {showSettings && (
-        <div className="p-4 bg-gray-900 border-b border-gray-800 grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-white text-sm block mb-1">
-              Tuning System (TET)
-            </label>
-            <select
-              value={config.divisions}
-              onChange={(e) =>
-                setConfig({ ...config, divisions: parseInt(e.target.value) })
-              }
-              className="w-full p-2 bg-gray-800 text-white rounded"
-            >
-              {Object.entries(presets).map(([name, value]) => (
-                <option key={value} value={value}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-white text-sm block mb-1">
-              Octaves: {config.octaves}
-            </label>
-            <input
-              type="range"
-              min="2"
-              max="6"
-              value={config.octaves}
-              onChange={(e) =>
-                setConfig({ ...config, octaves: parseInt(e.target.value) })
-              }
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="text-white text-sm block mb-1">
-              Base Frequency (Hz)
-            </label>
-            <input
-              type="number"
-              value={config.baseFreq}
-              onChange={(e) =>
-                setConfig({ ...config, baseFreq: parseFloat(e.target.value) })
-              }
-              className="w-full p-2 bg-gray-800 text-white rounded"
-            />
-          </div>
-
-          <div>
-            <label className="text-white text-sm block mb-1">
-              Spiral Tightness: {config.spiralTightness.toFixed(1)}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={config.spiralTightness}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  spiralTightness: parseFloat(e.target.value),
-                })
-              }
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="text-white text-sm block mb-1">
-              Key Width: {config.keyWidth}
-            </label>
-            <input
-              type="range"
-              min="20"
-              max="50"
-              value={config.keyWidth}
-              onChange={(e) =>
-                setConfig({ ...config, keyWidth: parseInt(e.target.value) })
-              }
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="text-white text-sm block mb-1">
-              Key Height: {config.keyHeight}
-            </label>
-            <input
-              type="range"
-              min="50"
-              max="120"
-              value={config.keyHeight}
-              onChange={(e) =>
-                setConfig({ ...config, keyHeight: parseInt(e.target.value) })
-              }
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="text-white text-sm block mb-1">
-              Release Time: {(config.releaseTime / 1000).toFixed(1)}s
-            </label>
-            <input
-              type="range"
-              min="500"
-              max="5000"
-              step="100"
-              value={config.releaseTime}
-              onChange={(e) =>
-                setConfig({ ...config, releaseTime: parseInt(e.target.value) })
-              }
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="text-white text-sm block mb-1">Color Mode</label>
-            <select
-              value={config.colorMode}
-              onChange={(e) =>
-                setConfig({ ...config, colorMode: e.target.value })
-              }
-              className="w-full p-2 bg-gray-800 text-white rounded"
-            >
-              <option value="piano">Piano (Black & White)</option>
-              <option value="alternating">Alternating (B&W)</option>
-              <option value="grayscale">Grayscale Gradient</option>
-              <option value="interval">Rainbow by Interval</option>
-              <option value="octave">Rainbow by Octave</option>
-            </select>
-          </div>
-
-          <div className="flex items-end">
-            <label className="flex items-center text-white text-sm">
-              <input
-                type="checkbox"
-                checked={config.showLabels}
-                onChange={(e) =>
-                  setConfig({ ...config, showLabels: e.target.checked })
-                }
-                className="mr-2"
-              />
-              Show Labels
-            </label>
-          </div>
-        </div>
+        <SettingsPanel
+          config={config}
+          setConfig={setConfig}
+          presets={presets}
+        />
       )}
 
       <div className="flex-1 flex items-center justify-center p-4 gap-4 overflow-auto">
         <div className="flex items-center gap-4">
-          <canvas
-            ref={canvasRef}
-            width={700}
-            height={700}
-            onClick={handleCanvasClick}
-            className="border border-gray-700 rounded cursor-pointer flex-shrink-0"
+          <SpiralKeyboard
+            config={config}
+            activeNote={activeNote}
+            notes={notes}
+            setNotes={setNotes}
+            onNoteClick={(note) => handleNotePlay(note, false)}
           />
-          <canvas
-            ref={visualCanvasRef}
-            width={700}
-            height={700}
-            className="border border-gray-700 rounded flex-shrink-0"
+          <PitchClassVisualizer
+            config={config}
+            activePitchClasses={activePitchClasses}
+            heldNotes={heldNotes}
+            releasedNotes={releasedNotes}
           />
         </div>
       </div>
