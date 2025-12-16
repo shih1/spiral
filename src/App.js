@@ -58,8 +58,35 @@ const useAudioEngine = () => {
 // ============================================================================
 // SPIRAL KEYBOARD CANVAS
 // ============================================================================
-const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick }) => {
+const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick, heldNotes }) => {
   const canvasRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const [pulsePhase, setPulsePhase] = useState(0);
+
+  // Animation loop for pulsing effect - only animate when notes are held
+  useEffect(() => {
+    if (heldNotes.length === 0 && !activeNote) return;
+
+    let lastTime = Date.now();
+
+    const animate = () => {
+      const now = Date.now();
+      const delta = now - lastTime;
+      lastTime = now;
+
+      // Much faster pulse for flashy effect
+      setPulsePhase((prev) => (prev + delta * 0.015) % (Math.PI * 2));
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [heldNotes.length, activeNote]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -135,8 +162,14 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick }) =>
     ctx.shadowBlur = 0;
 
     // Color function
-    const getColor = (note, isActive) => {
-      if (isActive) return '#ffff00';
+    const getColor = (note, isActive, isPitchClassHeld, hueShift, pulseIntensity) => {
+      if (isActive) {
+        // SUPER KITSCH - Bright neon rainbow that shifts!
+        const brightness = 50 + pulseIntensity * 30;
+        const saturation = 100;
+        return `hsl(${hueShift}, ${saturation}%, ${brightness}%)`;
+      }
+      if (isPitchClassHeld) return '#cc9900'; // Darker yellow for same pitch class different octave
 
       if (colorMode === 'piano') {
         const pianoPattern12 = [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1];
@@ -163,7 +196,23 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick }) =>
 
     // Draw keys with enhanced shadows
     calculatedNotes.forEach((note, i) => {
-      const isActive = activeNote === note.freq;
+      // Check if this exact note (pitch class + octave) is currently held
+      const isExactNoteHeld = heldNotes.some(
+        (held) => held.pitch === note.step && held.octave === note.octave
+      );
+      // Check if this pitch class is held in a different octave
+      const isPitchClassHeld = heldNotes.some(
+        (held) => held.pitch === note.step && held.octave !== note.octave
+      );
+
+      const isActive = isExactNoteHeld || activeNote === note.freq;
+
+      // Calculate pulse intensity - VERY flashy with high contrast
+      const rawPulse = Math.sin(pulsePhase);
+      const pulseIntensity = isActive ? rawPulse * 0.5 + 0.5 : 1; // 0 to 1 range
+
+      // Rainbow color cycle for extra flash
+      const hueShift = isActive ? (pulsePhase / (Math.PI * 2)) * 360 : 0;
 
       ctx.save();
       ctx.translate(note.x, note.y);
@@ -179,13 +228,27 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick }) =>
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 4;
       } else {
-        ctx.shadowBlur = 25;
-        ctx.shadowColor = 'rgba(255, 255, 0, 0.8)';
+        // MASSIVE flashy glow - kakkoii style!
+        ctx.shadowBlur = 40 + pulseIntensity * 40;
+        ctx.shadowColor = `hsla(${hueShift}, 100%, 60%, ${0.8 + pulseIntensity * 0.2})`;
       }
 
-      ctx.fillStyle = getColor(note, isActive);
-      ctx.strokeStyle = isActive ? '#ffffff' : '#333333';
-      ctx.lineWidth = isActive ? 3 : 2;
+      // Draw outer glow ring for extra flash
+      if (isActive) {
+        ctx.strokeStyle = `hsla(${hueShift}, 100%, 70%, ${pulseIntensity * 0.7})`;
+        ctx.lineWidth = 6 + pulseIntensity * 4;
+        ctx.strokeRect(-w / 2 - 4, -h / 2 - 4, w + 8, h + 8);
+      }
+
+      // MAIN KEY COLOR - now with hueShift and pulseIntensity for KITSCH
+      ctx.fillStyle = getColor(note, isActive, isPitchClassHeld, hueShift, pulseIntensity);
+
+      ctx.strokeStyle = isActive
+        ? `hsla(${hueShift}, 100%, 90%, 1)`
+        : isPitchClassHeld
+        ? '#ffcc66'
+        : '#333333';
+      ctx.lineWidth = isActive ? 4 + pulseIntensity * 2 : isPitchClassHeld ? 2.5 : 2;
       ctx.fillRect(-w / 2, -h / 2, w, h);
       ctx.strokeRect(-w / 2, -h / 2, w, h);
 
@@ -193,19 +256,66 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick }) =>
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
 
-      // Enhanced gradient for 3D effect
+      // EXTRA KITSCH LAYER: Holographic rainbow shimmer overlay
+      if (isActive) {
+        const shimmerGradient = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+        shimmerGradient.addColorStop(0, `hsla(${hueShift}, 100%, 80%, ${pulseIntensity * 0.5})`);
+        shimmerGradient.addColorStop(
+          0.25,
+          `hsla(${(hueShift + 90) % 360}, 100%, 80%, ${pulseIntensity * 0.6})`
+        );
+        shimmerGradient.addColorStop(
+          0.5,
+          `hsla(${(hueShift + 180) % 360}, 100%, 80%, ${pulseIntensity * 0.7})`
+        );
+        shimmerGradient.addColorStop(
+          0.75,
+          `hsla(${(hueShift + 270) % 360}, 100%, 80%, ${pulseIntensity * 0.6})`
+        );
+        shimmerGradient.addColorStop(1, `hsla(${hueShift}, 100%, 80%, ${pulseIntensity * 0.5})`);
+        ctx.fillStyle = shimmerGradient;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+      }
+
+      // Enhanced gradient for 3D effect - SUPER bright when active
       const gradient = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
-      gradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
-      gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.3)');
+      if (isActive) {
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${0.8 * pulseIntensity})`);
+        gradient.addColorStop(0.3, `hsla(${hueShift}, 100%, 80%, ${0.5 * pulseIntensity})`);
+        gradient.addColorStop(
+          0.7,
+          `hsla(${(hueShift + 180) % 360}, 100%, 80%, ${0.5 * pulseIntensity})`
+        );
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
+      } else {
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+        gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.3)');
+      }
       ctx.fillStyle = gradient;
       ctx.fillRect(-w / 2, -h / 2, w, h);
 
+      // Add sparkle effect at peak intensity
+      if (isActive && pulseIntensity > 0.8) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${(pulseIntensity - 0.8) * 5})`;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+      }
+
       if (showLabels && (note.step === 0 || i % Math.max(1, Math.floor(divisions / 6)) === 0)) {
-        const keyColor = getColor(note, false);
+        const keyColor = getColor(note, false, false, 0, 1);
         const isLightKey =
           keyColor === '#f5f5f5' || keyColor.includes('90%') || keyColor.includes('85%');
-        ctx.fillStyle = isLightKey ? '#000000' : '#ffffff';
+
+        // Make text stand out on rainbow background
+        if (isActive) {
+          ctx.fillStyle = '#000000';
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.strokeText(`${note.freq.toFixed(0)}`, 0, 0);
+        } else {
+          ctx.fillStyle = isLightKey ? '#000000' : '#ffffff';
+        }
+
         ctx.font = 'bold 9px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -213,6 +323,9 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick }) =>
 
         if (note.step === 0) {
           ctx.font = 'bold 8px sans-serif';
+          if (isActive) {
+            ctx.strokeText(`O${note.octave}`, 0, 12);
+          }
           ctx.fillText(`O${note.octave}`, 0, 12);
         }
       }
@@ -248,13 +361,13 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick }) =>
     ctx.fillText(`${totalNotes} notes • ${octaves} octaves • ${baseFreq}Hz base`, 20, 52);
     ctx.fillStyle = '#64c8ff';
     ctx.fillText(`Click keys to play!`, 20, 72);
-  }, [config, activeNote, setNotes]);
+  }, [config, activeNote, heldNotes, pulsePhase, setNotes]);
 
-  const handleClick = (e) => {
+  const handleInteraction = (clientX, clientY) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
 
     for (const note of notes) {
       const dx = x - note.x;
@@ -271,13 +384,27 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick }) =>
     }
   };
 
+  const handleClick = (e) => {
+    handleInteraction(e.clientX, e.clientY);
+  };
+
+  const handleTouchStart = (e) => {
+    e.preventDefault();
+    // Handle multiple touches for chords
+    Array.from(e.touches).forEach((touch) => {
+      handleInteraction(touch.clientX, touch.clientY);
+    });
+  };
+
   return (
     <canvas
       ref={canvasRef}
       width={700}
       height={700}
       onClick={handleClick}
+      onTouchStart={handleTouchStart}
       className="border border-gray-700 rounded cursor-pointer flex-shrink-0"
+      style={{ touchAction: 'none' }}
     />
   );
 };
@@ -598,15 +725,15 @@ const MicrotonalSpiral = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [notes, setNotes] = useState([]);
   const [config, setConfig] = useState({
-    divisions: 24,
+    divisions: 12,
     octaves: 4,
     baseFreq: 440,
-    spiralTightness: 0.3,
-    showLabels: true,
+    spiralTightness: 0.2,
+    showLabels: false,
     colorMode: 'piano',
-    keyWidth: 35,
-    keyHeight: 80,
-    releaseTime: 2000,
+    keyWidth: 28,
+    keyHeight: 76,
+    releaseTime: 1000,
   });
 
   const presets = { '12-TET': 12, '19-TET': 19, '24-TET': 24, '31-TET': 31, '53-TET': 53 };
@@ -645,7 +772,10 @@ const MicrotonalSpiral = () => {
     setActiveNote(note.freq);
 
     if (sustained) {
-      setHeldNotes((prev) => [...prev, { pitch: note.step, time: now, id: noteId }]);
+      setHeldNotes((prev) => [
+        ...prev,
+        { pitch: note.step, octave: note.octave, time: now, id: noteId },
+      ]);
     } else {
       setReleasedNotes((prev) => [...prev, { pitch: note.step, time: now, id: noteId }]);
     }
@@ -769,6 +899,7 @@ const MicrotonalSpiral = () => {
             activeNote={activeNote}
             notes={notes}
             setNotes={setNotes}
+            heldNotes={heldNotes}
             onNoteClick={(note) => handleNotePlay(note, false)}
           />
           <PitchClassVisualizer
@@ -787,6 +918,10 @@ const MicrotonalSpiral = () => {
         <ul className="list-disc list-inside mt-2 space-y-1">
           <li>
             <strong>Click any key</strong> to play its note (Web Audio API synthesizer)
+          </li>
+          <li>
+            <strong>Touch Support:</strong> Tap keys on mobile/tablet - use multiple fingers for
+            chords!
           </li>
           <li>
             <strong>Keyboard Control:</strong> Enable the toggle to play with your computer keyboard
