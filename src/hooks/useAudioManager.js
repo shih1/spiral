@@ -1,5 +1,6 @@
 // ============================================
-// FILE 1: src/hooks/useAudioManager.js
+// FILE: src/hooks/useAudioManager.js
+// OPTIMIZED VERSION - Single RAF loop for all fades
 // ============================================
 
 import { useState, useRef, useEffect } from 'react';
@@ -12,6 +13,8 @@ export const useAudioManager = (config) => {
   const [activeOscillators, setActiveOscillators] = useState({});
 
   const audioContextRef = useRef(null);
+  const fadeAnimationRef = useRef(null);
+  const fadingNotesRef = useRef(new Map()); // Track all fading notes
 
   // Initialize Audio Context
   useEffect(() => {
@@ -20,8 +23,70 @@ export const useAudioManager = (config) => {
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
+      if (fadeAnimationRef.current) {
+        cancelAnimationFrame(fadeAnimationRef.current);
+      }
     };
   }, []);
+
+  // Single RAF loop to handle ALL fading notes at once
+  useEffect(() => {
+    if (fadingNotesRef.current.size === 0) {
+      if (fadeAnimationRef.current) {
+        cancelAnimationFrame(fadeAnimationRef.current);
+        fadeAnimationRef.current = null;
+      }
+      return;
+    }
+
+    const animate = () => {
+      const now = Date.now();
+      let hasActiveFades = false;
+
+      // Update all fading notes in one go
+      setActivePitchClasses((prev) => {
+        const updated = prev
+          .map((pc) => {
+            const fadeInfo = fadingNotesRef.current.get(pc.id);
+            if (!fadeInfo) return pc;
+
+            const elapsed = now - fadeInfo.startTime;
+            const fadeProgress = Math.min(1, elapsed / fadeInfo.duration);
+            const newOpacity = Math.max(0, 1 - fadeProgress);
+
+            if (newOpacity <= 0) {
+              fadingNotesRef.current.delete(pc.id);
+              return null;
+            }
+
+            hasActiveFades = true;
+            return { ...pc, opacity: newOpacity };
+          })
+          .filter(Boolean);
+
+        return updated;
+      });
+
+      // Continue loop if there are still fading notes
+      if (hasActiveFades && fadingNotesRef.current.size > 0) {
+        fadeAnimationRef.current = requestAnimationFrame(animate);
+      } else {
+        fadeAnimationRef.current = null;
+        fadingNotesRef.current.clear();
+      }
+    };
+
+    if (!fadeAnimationRef.current) {
+      fadeAnimationRef.current = requestAnimationFrame(animate);
+    }
+
+    return () => {
+      if (fadeAnimationRef.current) {
+        cancelAnimationFrame(fadeAnimationRef.current);
+        fadeAnimationRef.current = null;
+      }
+    };
+  }, [fadingNotesRef.current.size]); // Trigger when fades are added/removed
 
   // Play a note
   const playNote = (freq, duration = 0.5, sustained = false) => {
@@ -61,29 +126,61 @@ export const useAudioManager = (config) => {
     oscillator.stop(ctx.currentTime + 0.1);
   };
 
-  // Release a note (handles fade out)
+  // Release a note (start fade animation)
   const releaseNote = (noteId, pitchClass) => {
     const now = Date.now();
+
     setHeldNotes((prev) => prev.filter((n) => n.id !== noteId));
     setReleasedNotes((prev) => [...prev, { pitch: pitchClass, time: now, id: noteId }]);
 
+    // Add to fading notes map
     const fadeStartDelay = Math.min(500, config.releaseTime * 0.25);
-    const fadeDuration = config.releaseTime - fadeStartDelay;
-    const fadeSteps = fadeDuration / 50;
 
     setTimeout(() => {
-      const fadeInterval = setInterval(() => {
-        setActivePitchClasses((prev) => {
-          const updated = prev.map((pc) =>
-            pc.id === noteId ? { ...pc, opacity: Math.max(0, pc.opacity - 1 / fadeSteps) } : pc
-          );
-          const filtered = updated.filter((pc) => pc.opacity > 0);
-          if (!filtered.find((pc) => pc.id === noteId)) {
-            clearInterval(fadeInterval);
+      fadingNotesRef.current.set(noteId, {
+        startTime: Date.now(),
+        duration: config.releaseTime - fadeStartDelay,
+      });
+
+      // Trigger the animation loop if not already running
+      if (!fadeAnimationRef.current) {
+        const animate = () => {
+          const now = Date.now();
+          let hasActiveFades = false;
+
+          setActivePitchClasses((prev) => {
+            const updated = prev
+              .map((pc) => {
+                const fadeInfo = fadingNotesRef.current.get(pc.id);
+                if (!fadeInfo) return pc;
+
+                const elapsed = now - fadeInfo.startTime;
+                const fadeProgress = Math.min(1, elapsed / fadeInfo.duration);
+                const newOpacity = Math.max(0, 1 - fadeProgress);
+
+                if (newOpacity <= 0) {
+                  fadingNotesRef.current.delete(pc.id);
+                  return null;
+                }
+
+                hasActiveFades = true;
+                return { ...pc, opacity: newOpacity };
+              })
+              .filter(Boolean);
+
+            return updated;
+          });
+
+          if (hasActiveFades && fadingNotesRef.current.size > 0) {
+            fadeAnimationRef.current = requestAnimationFrame(animate);
+          } else {
+            fadeAnimationRef.current = null;
+            fadingNotesRef.current.clear();
           }
-          return filtered;
-        });
-      }, 50);
+        };
+
+        fadeAnimationRef.current = requestAnimationFrame(animate);
+      }
     }, fadeStartDelay);
   };
 
