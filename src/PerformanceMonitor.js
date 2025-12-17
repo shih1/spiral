@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Activity, X } from 'lucide-react';
 
-const PerformanceMonitor = () => {
+const PerformanceMonitor = ({
+  activePitchClasses = [],
+  heldNotes = [],
+  releasedNotes = [],
+  activeOscillators = {},
+}) => {
   const [metrics, setMetrics] = useState({
     fps: 0,
     cls: null,
@@ -10,12 +15,26 @@ const PerformanceMonitor = () => {
     lcp: null,
     ttfb: null,
     renderTime: 0,
+    oscillatorCount: 0,
+    activePitchClassCount: 0,
   });
   const [isMinimized, setIsMinimized] = useState(false);
   const [history, setHistory] = useState([]);
   const frameCount = useRef(0);
   const lastTime = useRef(performance.now());
   const renderStart = useRef(0);
+
+  // Track oscillators and pitch classes
+  useEffect(() => {
+    const oscCount = Object.keys(activeOscillators).length;
+    console.log('🎵 Active Oscillators:', oscCount, 'Keys:', Object.keys(activeOscillators));
+
+    setMetrics((prev) => ({
+      ...prev,
+      oscillatorCount: oscCount,
+      activePitchClassCount: activePitchClasses.length,
+    }));
+  }, [activeOscillators, activePitchClasses]);
 
   // FPS Counter
   useEffect(() => {
@@ -59,7 +78,6 @@ const PerformanceMonitor = () => {
       }));
     };
 
-    // Import web-vitals dynamically
     import('web-vitals')
       .then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
         getCLS(collectMetric);
@@ -133,6 +151,16 @@ const PerformanceMonitor = () => {
           warning={parseFloat(metrics.renderTime) > 16}
         />
 
+        {/* Audio Metrics */}
+        <div className="text-xs text-gray-500 font-semibold mt-3 mb-1">AUDIO ENGINE</div>
+
+        <MetricRow
+          label="🎵 Active Oscillators"
+          value={metrics.oscillatorCount}
+          warning={metrics.oscillatorCount > 10}
+        />
+        <MetricRow label="Active Pitch Classes" value={metrics.activePitchClassCount} />
+
         {/* Web Vitals */}
         <div className="text-xs text-gray-500 font-semibold mt-3 mb-1">Core Web Vitals</div>
 
@@ -167,7 +195,7 @@ const PerformanceMonitor = () => {
       {metrics.fps < 30 && (
         <div className="p-3 bg-red-900/20 border-t border-red-800/30">
           <p className="text-xs text-red-300">
-            ⚠️ Low FPS detected! Check fade animations and state updates.
+            ⚠️ Low FPS detected! Check oscillator count and rendering.
           </p>
         </div>
       )}

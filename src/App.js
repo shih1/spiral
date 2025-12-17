@@ -54,7 +54,12 @@ function App() {
 
   return (
     <div className="w-full h-full bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 flex flex-col">
-      <PerformanceMonitor /> {/* ADD THIS */}
+      <PerformanceMonitor
+        activePitchClasses={activePitchClasses}
+        heldNotes={heldNotes}
+        releasedNotes={releasedNotes}
+        activeOscillators={activeOscillators}
+      />{' '}
       {/* Header */}
       <div className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 shadow-lg">
         <div className="flex items-center gap-3">

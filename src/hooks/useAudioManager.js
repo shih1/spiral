@@ -3,7 +3,7 @@
 // OPTIMIZED VERSION - Single RAF loop for all fades
 // ============================================
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 export const useAudioManager = (config) => {
   const [activeNote, setActiveNote] = useState(null);
@@ -14,7 +14,8 @@ export const useAudioManager = (config) => {
 
   const audioContextRef = useRef(null);
   const fadeAnimationRef = useRef(null);
-  const fadingNotesRef = useRef(new Map()); // Track all fading notes
+  const fadingNotesRef = useRef(new Map());
+  const isAnimatingRef = useRef(false); // Track all fading notes
 
   // Initialize Audio Context
   useEffect(() => {
@@ -89,7 +90,7 @@ export const useAudioManager = (config) => {
   }, [fadingNotesRef.current.size]); // Trigger when fades are added/removed
 
   // Play a note
-  const playNote = (freq, duration = 0.5, sustained = false) => {
+  const playNote = useCallback((freq, duration = 0.5, sustained = false) => {
     const ctx = audioContextRef.current;
     if (!ctx) return null;
 
@@ -113,10 +114,10 @@ export const useAudioManager = (config) => {
     }
 
     return { oscillator, gainNode, id: Date.now() + Math.random() };
-  };
+  }, []);
 
   // Stop a note
-  const stopNote = (oscillator, gainNode) => {
+  const stopNote = useCallback((oscillator, gainNode) => {
     const ctx = audioContextRef.current;
     if (!ctx) return;
 
@@ -124,95 +125,101 @@ export const useAudioManager = (config) => {
     gainNode.gain.setValueAtTime(gainNode.gain.value, ctx.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
     oscillator.stop(ctx.currentTime + 0.1);
-  };
+  }, []);
 
   // Release a note (start fade animation)
-  const releaseNote = (noteId, pitchClass) => {
-    const now = Date.now();
+  const releaseNote = useCallback(
+    (noteId, pitchClass) => {
+      const now = Date.now();
 
-    setHeldNotes((prev) => prev.filter((n) => n.id !== noteId));
-    setReleasedNotes((prev) => [...prev, { pitch: pitchClass, time: now, id: noteId }]);
+      setHeldNotes((prev) => prev.filter((n) => n.id !== noteId));
+      setReleasedNotes((prev) => [...prev, { pitch: pitchClass, time: now, id: noteId }]);
 
-    // Add to fading notes map
-    const fadeStartDelay = Math.min(500, config.releaseTime * 0.25);
+      // Add to fading notes map
+      const fadeStartDelay = Math.min(500, config.releaseTime * 0.25);
 
-    setTimeout(() => {
-      fadingNotesRef.current.set(noteId, {
-        startTime: Date.now(),
-        duration: config.releaseTime - fadeStartDelay,
-      });
+      setTimeout(() => {
+        fadingNotesRef.current.set(noteId, {
+          startTime: Date.now(),
+          duration: config.releaseTime - fadeStartDelay,
+        });
 
-      // Trigger the animation loop if not already running
-      if (!fadeAnimationRef.current) {
-        const animate = () => {
-          const now = Date.now();
-          let hasActiveFades = false;
+        // Trigger the animation loop if not already running
+        if (!fadeAnimationRef.current) {
+          const animate = () => {
+            const now = Date.now();
+            let hasActiveFades = false;
 
-          setActivePitchClasses((prev) => {
-            const updated = prev
-              .map((pc) => {
-                const fadeInfo = fadingNotesRef.current.get(pc.id);
-                if (!fadeInfo) return pc;
+            setActivePitchClasses((prev) => {
+              const updated = prev
+                .map((pc) => {
+                  const fadeInfo = fadingNotesRef.current.get(pc.id);
+                  if (!fadeInfo) return pc;
 
-                const elapsed = now - fadeInfo.startTime;
-                const fadeProgress = Math.min(1, elapsed / fadeInfo.duration);
-                const newOpacity = Math.max(0, 1 - fadeProgress);
+                  const elapsed = now - fadeInfo.startTime;
+                  const fadeProgress = Math.min(1, elapsed / fadeInfo.duration);
+                  const newOpacity = Math.max(0, 1 - fadeProgress);
 
-                if (newOpacity <= 0) {
-                  fadingNotesRef.current.delete(pc.id);
-                  return null;
-                }
+                  if (newOpacity <= 0) {
+                    fadingNotesRef.current.delete(pc.id);
+                    return null;
+                  }
 
-                hasActiveFades = true;
-                return { ...pc, opacity: newOpacity };
-              })
-              .filter(Boolean);
+                  hasActiveFades = true;
+                  return { ...pc, opacity: newOpacity };
+                })
+                .filter(Boolean);
 
-            return updated;
-          });
+              return updated;
+            });
 
-          if (hasActiveFades && fadingNotesRef.current.size > 0) {
-            fadeAnimationRef.current = requestAnimationFrame(animate);
-          } else {
-            fadeAnimationRef.current = null;
-            fadingNotesRef.current.clear();
-          }
-        };
+            if (hasActiveFades && fadingNotesRef.current.size > 0) {
+              fadeAnimationRef.current = requestAnimationFrame(animate);
+            } else {
+              fadeAnimationRef.current = null;
+              fadingNotesRef.current.clear();
+            }
+          };
 
-        fadeAnimationRef.current = requestAnimationFrame(animate);
-      }
-    }, fadeStartDelay);
-  };
+          fadeAnimationRef.current = requestAnimationFrame(animate);
+        }
+      }, fadeStartDelay);
+    },
+    [config.releaseTime]
+  );
 
   // Handle note play (click or keyboard)
-  const handleNotePlay = (note, sustained = false) => {
-    const nodes = playNote(note.freq, 0.5, sustained);
-    if (!nodes) return null;
+  const handleNotePlay = useCallback(
+    (note, sustained = false) => {
+      const nodes = playNote(note.freq, 0.5, sustained);
+      if (!nodes) return null;
 
-    const now = Date.now();
-    const noteId = nodes.id;
+      const now = Date.now();
+      const noteId = nodes.id;
 
-    setActiveNote(note.freq);
+      setActiveNote(note.freq);
 
-    if (sustained) {
-      setHeldNotes((prev) => [
-        ...prev,
-        { pitch: note.step, octave: note.octave, time: now, id: noteId },
-      ]);
-    } else {
-      setReleasedNotes((prev) => [...prev, { pitch: note.step, time: now, id: noteId }]);
-    }
+      if (sustained) {
+        setHeldNotes((prev) => [
+          ...prev,
+          { pitch: note.step, octave: note.octave, time: now, id: noteId },
+        ]);
+      } else {
+        setReleasedNotes((prev) => [...prev, { pitch: note.step, time: now, id: noteId }]);
+      }
 
-    const newPitchClass = { pitch: note.step, opacity: 1, id: noteId, sustained };
-    setActivePitchClasses((prev) => [...prev, newPitchClass]);
+      const newPitchClass = { pitch: note.step, opacity: 1, id: noteId, sustained };
+      setActivePitchClasses((prev) => [...prev, newPitchClass]);
 
-    if (!sustained) {
-      setTimeout(() => setActiveNote(null), 500);
-      setTimeout(() => releaseNote(noteId, note.step), 500);
-    }
+      if (!sustained) {
+        setTimeout(() => setActiveNote(null), 500);
+        setTimeout(() => releaseNote(noteId, note.step), 500);
+      }
 
-    return nodes;
-  };
+      return nodes;
+    },
+    [playNote, releaseNote]
+  );
 
   return {
     activeNote,
