@@ -1,7 +1,3 @@
-// ============================================
-// FILE 3: src/App.js (UPDATED)
-// ============================================
-
 import React, { useState } from 'react';
 import { Settings, Volume2 } from 'lucide-react';
 import SpiralKeyboard from './SpiralKeyboard';
