@@ -159,7 +159,8 @@ const PerformanceMonitor = ({
           value={metrics.oscillatorCount}
           warning={metrics.oscillatorCount > 10}
         />
-        <MetricRow label="Active Pitch Classes" value={metrics.activePitchClassCount} />
+
+        <MetricRow label="Active Voices" value={metrics.activePitchClassCount} />
 
         {/* Web Vitals */}
         <div className="text-xs text-gray-500 font-semibold mt-3 mb-1">Core Web Vitals</div>

@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/hooks/useAudioManager.js
-// OPTIMIZED VERSION - Single RAF loop for all fades
+// FIXED VERSION - Continuous RAF loop
 // ============================================
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -13,9 +13,7 @@ export const useAudioManager = (config) => {
   const [activeOscillators, setActiveOscillators] = useState({});
 
   const audioContextRef = useRef(null);
-  const fadeAnimationRef = useRef(null);
-  const fadingNotesRef = useRef(new Map());
-  const isAnimatingRef = useRef(false); // Track all fading notes
+  const animationFrameRef = useRef(null);
 
   // Initialize Audio Context
   useEffect(() => {
@@ -24,70 +22,55 @@ export const useAudioManager = (config) => {
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
-      if (fadeAnimationRef.current) {
-        cancelAnimationFrame(fadeAnimationRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
     };
   }, []);
 
-  // Single RAF loop to handle ALL fading notes at once
+  // Continuous animation loop for fading - ALWAYS RUNNING
   useEffect(() => {
-    if (fadingNotesRef.current.size === 0) {
-      if (fadeAnimationRef.current) {
-        cancelAnimationFrame(fadeAnimationRef.current);
-        fadeAnimationRef.current = null;
-      }
-      return;
-    }
-
     const animate = () => {
       const now = Date.now();
-      let hasActiveFades = false;
 
-      // Update all fading notes in one go
       setActivePitchClasses((prev) => {
-        const updated = prev
+        return prev
           .map((pc) => {
-            const fadeInfo = fadingNotesRef.current.get(pc.id);
-            if (!fadeInfo) return pc;
+            // Skip sustained notes (held down keys)
+            if (pc.sustained) return pc;
 
-            const elapsed = now - fadeInfo.startTime;
-            const fadeProgress = Math.min(1, elapsed / fadeInfo.duration);
-            const newOpacity = Math.max(0, 1 - fadeProgress);
+            // Calculate fade based on fadeStartTime
+            if (pc.fadeStartTime) {
+              const elapsed = now - pc.fadeStartTime;
+              const fadeProgress = Math.min(1, elapsed / (config.releaseTime - 500));
+              const newOpacity = Math.max(0, 1 - fadeProgress);
 
-            if (newOpacity <= 0) {
-              fadingNotesRef.current.delete(pc.id);
-              return null;
+              console.log(`Fading note ${pc.id}: opacity=${newOpacity.toFixed(2)}`);
+
+              if (newOpacity <= 0) {
+                console.log(`✅ Removed note ${pc.id}`);
+                return null; // Remove completely faded notes
+              }
+
+              return { ...pc, opacity: newOpacity };
             }
 
-            hasActiveFades = true;
-            return { ...pc, opacity: newOpacity };
+            return pc;
           })
           .filter(Boolean);
-
-        return updated;
       });
 
-      // Continue loop if there are still fading notes
-      if (hasActiveFades && fadingNotesRef.current.size > 0) {
-        fadeAnimationRef.current = requestAnimationFrame(animate);
-      } else {
-        fadeAnimationRef.current = null;
-        fadingNotesRef.current.clear();
-      }
+      animationFrameRef.current = requestAnimationFrame(animate);
     };
 
-    if (!fadeAnimationRef.current) {
-      fadeAnimationRef.current = requestAnimationFrame(animate);
-    }
+    animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (fadeAnimationRef.current) {
-        cancelAnimationFrame(fadeAnimationRef.current);
-        fadeAnimationRef.current = null;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [fadingNotesRef.current.size]); // Trigger when fades are added/removed
+  }, [config.releaseTime]);
 
   // Play a note
   const playNote = useCallback((freq, duration = 0.5, sustained = false) => {
@@ -127,62 +110,33 @@ export const useAudioManager = (config) => {
     oscillator.stop(ctx.currentTime + 0.1);
   }, []);
 
-  // Release a note (start fade animation)
+  // Release a note (mark it to start fading)
   const releaseNote = useCallback(
     (noteId, pitchClass) => {
       const now = Date.now();
 
+      console.log('🔵 Releasing note:', noteId);
+
       setHeldNotes((prev) => prev.filter((n) => n.id !== noteId));
       setReleasedNotes((prev) => [...prev, { pitch: pitchClass, time: now, id: noteId }]);
 
-      // Add to fading notes map
+      // Mark the pitch class to start fading after a delay
       const fadeStartDelay = Math.min(500, config.releaseTime * 0.25);
 
       setTimeout(() => {
-        fadingNotesRef.current.set(noteId, {
-          startTime: Date.now(),
-          duration: config.releaseTime - fadeStartDelay,
-        });
-
-        // Trigger the animation loop if not already running
-        if (!fadeAnimationRef.current) {
-          const animate = () => {
-            const now = Date.now();
-            let hasActiveFades = false;
-
-            setActivePitchClasses((prev) => {
-              const updated = prev
-                .map((pc) => {
-                  const fadeInfo = fadingNotesRef.current.get(pc.id);
-                  if (!fadeInfo) return pc;
-
-                  const elapsed = now - fadeInfo.startTime;
-                  const fadeProgress = Math.min(1, elapsed / fadeInfo.duration);
-                  const newOpacity = Math.max(0, 1 - fadeProgress);
-
-                  if (newOpacity <= 0) {
-                    fadingNotesRef.current.delete(pc.id);
-                    return null;
-                  }
-
-                  hasActiveFades = true;
-                  return { ...pc, opacity: newOpacity };
-                })
-                .filter(Boolean);
-
-              return updated;
-            });
-
-            if (hasActiveFades && fadingNotesRef.current.size > 0) {
-              fadeAnimationRef.current = requestAnimationFrame(animate);
-            } else {
-              fadeAnimationRef.current = null;
-              fadingNotesRef.current.clear();
+        console.log('🟢 Starting fade for note:', noteId);
+        setActivePitchClasses((prev) => {
+          return prev.map((pc) => {
+            if (pc.id === noteId) {
+              return {
+                ...pc,
+                sustained: false,
+                fadeStartTime: Date.now(),
+              };
             }
-          };
-
-          fadeAnimationRef.current = requestAnimationFrame(animate);
-        }
+            return pc;
+          });
+        });
       }, fadeStartDelay);
     },
     [config.releaseTime]
@@ -197,6 +151,8 @@ export const useAudioManager = (config) => {
       const now = Date.now();
       const noteId = nodes.id;
 
+      console.log('🎵 Playing note:', noteId, 'sustained:', sustained);
+
       setActiveNote(note.freq);
 
       if (sustained) {
@@ -208,8 +164,18 @@ export const useAudioManager = (config) => {
         setReleasedNotes((prev) => [...prev, { pitch: note.step, time: now, id: noteId }]);
       }
 
-      const newPitchClass = { pitch: note.step, opacity: 1, id: noteId, sustained };
-      setActivePitchClasses((prev) => [...prev, newPitchClass]);
+      const newPitchClass = {
+        pitch: note.step,
+        opacity: 1,
+        id: noteId,
+        sustained,
+        fadeStartTime: null, // Will be set when released
+      };
+
+      setActivePitchClasses((prev) => {
+        console.log('Adding pitch class, total will be:', prev.length + 1);
+        return [...prev, newPitchClass];
+      });
 
       if (!sustained) {
         setTimeout(() => setActiveNote(null), 500);
