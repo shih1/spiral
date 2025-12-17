@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Activity, X } from 'lucide-react';
+import { Activity, X, Copy, Check } from 'lucide-react';
 
 const PerformanceMonitor = ({
   activePitchClasses = [],
@@ -20,6 +20,7 @@ const PerformanceMonitor = ({
   });
   const [isMinimized, setIsMinimized] = useState(false);
   const [history, setHistory] = useState([]);
+  const [copied, setCopied] = useState(false);
   const frameCount = useRef(0);
   const lastTime = useRef(performance.now());
   const renderStart = useRef(0);
@@ -95,6 +96,24 @@ const PerformanceMonitor = ({
     return 'text-red-400';
   };
 
+  const copyMetrics = () => {
+    const text = `Performance Metrics:
+FPS: ${metrics.fps}
+Render Time: ${metrics.renderTime}ms
+Active Oscillators: ${metrics.oscillatorCount}
+Active Voices: ${metrics.activePitchClassCount}
+CLS: ${metrics.cls || 'measuring...'}
+FID: ${metrics.fid ? `${metrics.fid}ms` : 'measuring...'}
+FCP: ${metrics.fcp ? `${metrics.fcp}ms` : 'measuring...'}
+LCP: ${metrics.lcp ? `${metrics.lcp}ms` : 'measuring...'}
+TTFB: ${metrics.ttfb ? `${metrics.ttfb}ms` : 'measuring...'}`;
+
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   if (isMinimized) {
     return (
       <div className="fixed top-20 right-4 z-50">
@@ -109,23 +128,36 @@ const PerformanceMonitor = ({
   }
 
   return (
-    <div className="fixed top-20 right-4 w-80 bg-gray-900/95 backdrop-blur border border-gray-700 rounded-lg shadow-2xl z-50 overflow-hidden">
+    <div className="fixed top-20 right-4 w-80 bg-gray-900/95 backdrop-blur border border-gray-700 rounded-lg shadow-2xl z-50 overflow-hidden select-text">
       {/* Header */}
       <div className="flex items-center justify-between p-3 bg-gray-800/50 border-b border-gray-700">
         <div className="flex items-center gap-2">
           <Activity size={18} className="text-blue-400" />
           <h3 className="text-sm font-semibold text-white">Performance Monitor</h3>
         </div>
-        <button
-          onClick={() => setIsMinimized(true)}
-          className="p-1 hover:bg-gray-700 rounded transition-colors"
-        >
-          <X size={16} className="text-gray-400" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={copyMetrics}
+            className="p-1 hover:bg-gray-700 rounded transition-colors"
+            title="Copy metrics"
+          >
+            {copied ? (
+              <Check size={16} className="text-green-400" />
+            ) : (
+              <Copy size={16} className="text-gray-400" />
+            )}
+          </button>
+          <button
+            onClick={() => setIsMinimized(true)}
+            className="p-1 hover:bg-gray-700 rounded transition-colors"
+          >
+            <X size={16} className="text-gray-400" />
+          </button>
+        </div>
       </div>
 
       {/* Metrics */}
-      <div className="p-3 space-y-2">
+      <div className="p-3 space-y-2 select-text">
         {/* FPS - Most Important */}
         <div className="bg-gray-800/50 rounded p-2">
           <div className="flex items-center justify-between mb-1">
@@ -159,8 +191,7 @@ const PerformanceMonitor = ({
           value={metrics.oscillatorCount}
           warning={metrics.oscillatorCount > 10}
         />
-
-        <MetricRow label="Active Voices" value={metrics.activePitchClassCount} />
+        <MetricRow label="Active Pitch Classes" value={metrics.activePitchClassCount} />
 
         {/* Web Vitals */}
         <div className="text-xs text-gray-500 font-semibold mt-3 mb-1">Core Web Vitals</div>
