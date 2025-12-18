@@ -3,6 +3,7 @@ import { Settings, Volume2 } from 'lucide-react';
 import SpiralKeyboard from './SpiralKeyboard';
 import PitchClassVisualizer from './PitchClassVisualizer';
 import SettingsPanel from './SettingsPanel';
+import MixerPanel from './MixerPanel';
 import Instructions from './Instructions';
 import { useAudioManager } from './hooks/useAudioManager';
 import { useKeyboardControls } from './hooks/useKeyboardControls';
@@ -24,6 +25,17 @@ function App() {
     releaseTime: 1000,
   });
 
+  const [mixer, setMixer] = useState({
+    masterVolume: 0.7,
+    muted: false,
+  });
+
+  const [reverb, setReverb] = useState({
+    enabled: false,
+    wet: 0.3,
+    decay: 2.0,
+  });
+
   const presets = { '12-TET': 12, '19-TET': 19, '24-TET': 24, '31-TET': 31, '53-TET': 53 };
 
   // Audio manager hook - handles all audio and note state
@@ -38,7 +50,7 @@ function App() {
     handleNotePlay,
     stopNote,
     releaseNote,
-  } = useAudioManager(config);
+  } = useAudioManager(config, mixer, reverb);
 
   // Keyboard controls hook
   useKeyboardControls({
@@ -59,7 +71,7 @@ function App() {
         heldNotes={heldNotes}
         releasedNotes={releasedNotes}
         activeOscillators={activeOscillators}
-      />{' '}
+      />
       {/* Header */}
       <div className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 shadow-lg">
         <div className="flex items-center gap-3">
@@ -90,6 +102,10 @@ function App() {
       </div>
       {/* Settings Panel */}
       {showSettings && <SettingsPanel config={config} setConfig={setConfig} presets={presets} />}
+
+      {/* Mixer Panel (includes Volume + Reverb) */}
+      <MixerPanel mixer={mixer} setMixer={setMixer} reverb={reverb} setReverb={setReverb} />
+
       {/* Main Content Area */}
       <div className="flex-1 flex items-center justify-center p-4 gap-4 overflow-auto">
         <div className="flex items-center gap-4">
