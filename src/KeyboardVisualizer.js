@@ -3,115 +3,102 @@ import React from 'react';
 const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, config }) => {
   const { divisions } = config;
 
-  // Physical keyboard layout - each row maps to sequential chromatic steps
+  // Two octaves across 4 rows:
+  // Rows 0+1: Lower octave (continuous from step 0)
+  // Rows 2+3: Upper octave (continuous from step divisions)
   const keyboardLayout = [
-    // Row 3 (top number row) - 3 octaves up
+    // Row 3 (top number row) - Upper octave continuation
     {
       row: 3,
-      octave: 3,
       keys: [
-        { code: 'Digit1', key: '1', step: 0 },
-        { code: 'Digit2', key: '2', step: 1 },
-        { code: 'Digit3', key: '3', step: 2 },
-        { code: 'Digit4', key: '4', step: 3 },
-        { code: 'Digit5', key: '5', step: 4 },
-        { code: 'Digit6', key: '6', step: 5 },
-        { code: 'Digit7', key: '7', step: 6 },
-        { code: 'Digit8', key: '8', step: 7 },
-        { code: 'Digit9', key: '9', step: 8 },
-        { code: 'Digit0', key: '0', step: 9 },
-        { code: 'Minus', key: '-', step: 10 },
-        { code: 'Equal', key: '=', step: 11 },
+        { code: 'Digit1', key: '1', noteIndex: divisions + 10 },
+        { code: 'Digit2', key: '2', noteIndex: divisions + 11 },
+        { code: 'Digit3', key: '3', noteIndex: divisions + 12 },
+        { code: 'Digit4', key: '4', noteIndex: divisions + 13 },
+        { code: 'Digit5', key: '5', noteIndex: divisions + 14 },
+        { code: 'Digit6', key: '6', noteIndex: divisions + 15 },
+        { code: 'Digit7', key: '7', noteIndex: divisions + 16 },
+        { code: 'Digit8', key: '8', noteIndex: divisions + 17 },
+        { code: 'Digit9', key: '9', noteIndex: divisions + 18 },
+        { code: 'Digit0', key: '0', noteIndex: divisions + 19 },
+        { code: 'Minus', key: '-', noteIndex: divisions + 20 },
+        { code: 'Equal', key: '=', noteIndex: divisions + 21 },
       ],
     },
-    // Row 2 (QWERTY row) - 2 octaves up
+    // Row 2 (QWERTY row) - Upper octave start
     {
       row: 2,
-      octave: 2,
       keys: [
-        { code: 'KeyQ', key: 'Q', step: 0 },
-        { code: 'KeyW', key: 'W', step: 1 },
-        { code: 'KeyE', key: 'E', step: 2 },
-        { code: 'KeyR', key: 'R', step: 3 },
-        { code: 'KeyT', key: 'T', step: 4 },
-        { code: 'KeyY', key: 'Y', step: 5 },
-        { code: 'KeyU', key: 'U', step: 6 },
-        { code: 'KeyI', key: 'I', step: 7 },
-        { code: 'KeyO', key: 'O', step: 8 },
-        { code: 'KeyP', key: 'P', step: 9 },
-        { code: 'BracketLeft', key: '[', step: 10 },
-        { code: 'BracketRight', key: ']', step: 11 },
-        { code: 'Backslash', key: '\\', step: 12 },
+        { code: 'KeyQ', key: 'Q', noteIndex: divisions + 0 },
+        { code: 'KeyW', key: 'W', noteIndex: divisions + 1 },
+        { code: 'KeyE', key: 'E', noteIndex: divisions + 2 },
+        { code: 'KeyR', key: 'R', noteIndex: divisions + 3 },
+        { code: 'KeyT', key: 'T', noteIndex: divisions + 4 },
+        { code: 'KeyY', key: 'Y', noteIndex: divisions + 5 },
+        { code: 'KeyU', key: 'U', noteIndex: divisions + 6 },
+        { code: 'KeyI', key: 'I', noteIndex: divisions + 7 },
+        { code: 'KeyO', key: 'O', noteIndex: divisions + 8 },
+        { code: 'KeyP', key: 'P', noteIndex: divisions + 9 },
+        { code: 'BracketLeft', key: '[', noteIndex: divisions + 10 },
+        { code: 'BracketRight', key: ']', noteIndex: divisions + 11 },
+        { code: 'Backslash', key: '\\', noteIndex: divisions + 12 },
       ],
     },
-    // Row 1 (ASDF row) - 1 octave up
+    // Row 1 (ASDF row) - Lower octave continuation
     {
       row: 1,
-      octave: 1,
       keys: [
-        { code: 'KeyA', key: 'A', step: 0 },
-        { code: 'KeyS', key: 'S', step: 1 },
-        { code: 'KeyD', key: 'D', step: 2 },
-        { code: 'KeyF', key: 'F', step: 3 },
-        { code: 'KeyG', key: 'G', step: 4 },
-        { code: 'KeyH', key: 'H', step: 5 },
-        { code: 'KeyJ', key: 'J', step: 6 },
-        { code: 'KeyK', key: 'K', step: 7 },
-        { code: 'KeyL', key: 'L', step: 8 },
-        { code: 'Semicolon', key: ';', step: 9 },
-        { code: 'Quote', key: "'", step: 10 },
+        { code: 'KeyA', key: 'A', noteIndex: 10 },
+        { code: 'KeyS', key: 'S', noteIndex: 11 },
+        { code: 'KeyD', key: 'D', noteIndex: 12 },
+        { code: 'KeyF', key: 'F', noteIndex: 13 },
+        { code: 'KeyG', key: 'G', noteIndex: 14 },
+        { code: 'KeyH', key: 'H', noteIndex: 15 },
+        { code: 'KeyJ', key: 'J', noteIndex: 16 },
+        { code: 'KeyK', key: 'K', noteIndex: 17 },
+        { code: 'KeyL', key: 'L', noteIndex: 18 },
+        { code: 'Semicolon', key: ';', noteIndex: 19 },
+        { code: 'Quote', key: "'", noteIndex: 20 },
       ],
     },
-    // Row 0 (ZXCV row) - Base octave
+    // Row 0 (ZXCV row) - Lower octave start
     {
       row: 0,
-      octave: 0,
       keys: [
-        { code: 'KeyZ', key: 'Z', step: 0 },
-        { code: 'KeyX', key: 'X', step: 1 },
-        { code: 'KeyC', key: 'C', step: 2 },
-        { code: 'KeyV', key: 'V', step: 3 },
-        { code: 'KeyB', key: 'B', step: 4 },
-        { code: 'KeyN', key: 'N', step: 5 },
-        { code: 'KeyM', key: 'M', step: 6 },
-        { code: 'Comma', key: ',', step: 7 },
-        { code: 'Period', key: '.', step: 8 },
-        { code: 'Slash', key: '/', step: 9 },
+        { code: 'KeyZ', key: 'Z', noteIndex: 0 },
+        { code: 'KeyX', key: 'X', noteIndex: 1 },
+        { code: 'KeyC', key: 'C', noteIndex: 2 },
+        { code: 'KeyV', key: 'V', noteIndex: 3 },
+        { code: 'KeyB', key: 'B', noteIndex: 4 },
+        { code: 'KeyN', key: 'N', noteIndex: 5 },
+        { code: 'KeyM', key: 'M', noteIndex: 6 },
+        { code: 'Comma', key: ',', noteIndex: 7 },
+        { code: 'Period', key: '.', noteIndex: 8 },
+        { code: 'Slash', key: '/', noteIndex: 9 },
       ],
     },
   ];
 
   // Get note label as a fraction
-  const getNoteLabel = (step, octave) => {
-    // Only show keys that are within the current TET system
-    if (step >= divisions) return null;
-
-    const absoluteStep = octave * divisions + step;
-    return `${absoluteStep}/${divisions}`;
+  const getNoteLabel = (noteIndex) => {
+    return `${noteIndex}/${divisions}`;
   };
 
-  // Check if a note is currently active by matching step
-  const isNoteActive = (step, octave) => {
-    if (step >= divisions) return false;
-    const absoluteStep = octave * divisions + step;
-    return activePitchClasses.some((pc) => pc.step === absoluteStep % divisions);
+  // Check if a note at this index is currently active
+  const isNoteActive = (noteIndex) => {
+    const step = noteIndex % divisions;
+    return activePitchClasses.some((pc) => pc.step === step);
   };
 
   // Check if note is held vs releasing
-  const isNoteHeld = (step, octave) => {
-    if (step >= divisions) return false;
-    const absoluteStep = octave * divisions + step;
-    return heldNotes.some((n) => n.step === absoluteStep);
+  const isNoteHeld = (noteIndex) => {
+    return heldNotes.some((n) => n.step === noteIndex);
   };
 
   // Get key style based on state
-  const getKeyStyle = (step, octave, isValid) => {
-    if (!isValid) {
-      return 'bg-gray-800/30 text-gray-600 border-gray-800 cursor-not-allowed opacity-30';
-    }
-
-    const isActive = isNoteActive(step, octave);
-    const isHeld = isNoteHeld(step, octave);
+  const getKeyStyle = (noteIndex) => {
+    const isActive = isNoteActive(noteIndex);
+    const isHeld = isNoteHeld(noteIndex);
 
     if (isActive && isHeld) {
       // Held note - bright glow
@@ -135,7 +122,7 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
     <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 shadow-2xl">
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-white mb-1">Keyboard Input</h2>
-        <p className="text-sm text-gray-400">{divisions}-TET Chromatic Layout</p>
+        <p className="text-sm text-gray-400">{divisions}-TET • 2 Octaves across 4 rows</p>
       </div>
 
       <div className="space-y-2">
@@ -146,8 +133,7 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
             style={{ paddingLeft: `${getRowOffset(rowData.row)}px` }}
           >
             {rowData.keys.map((keyData) => {
-              const noteLabel = getNoteLabel(keyData.step, rowData.octave);
-              const isValid = noteLabel !== null;
+              const noteLabel = getNoteLabel(keyData.noteIndex);
 
               return (
                 <div
@@ -158,17 +144,11 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
                     font-semibold text-sm
                     transition-all duration-150 ease-out
                     border-2
-                    ${getKeyStyle(keyData.step, rowData.octave, isValid)}
+                    ${getKeyStyle(keyData.noteIndex)}
                   `}
                 >
-                  {isValid ? (
-                    <>
-                      <div className="text-xs font-bold leading-tight text-center">{noteLabel}</div>
-                      <div className="text-xs mt-1 text-gray-400">{keyData.key}</div>
-                    </>
-                  ) : (
-                    <div className="text-xs text-gray-600">{keyData.key}</div>
-                  )}
+                  <div className="text-xs font-bold leading-tight text-center">{noteLabel}</div>
+                  <div className="text-xs mt-1 text-gray-400">{keyData.key}</div>
                 </div>
               );
             })}
@@ -177,7 +157,7 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
       </div>
 
       <div className="mt-4 text-xs text-gray-500 text-center">
-        Press keys on your keyboard • Each row is one octave higher
+        Lower octave: Z-/ + A-' • Upper octave: Q-\ + 1-=
       </div>
     </div>
   );

@@ -17,66 +17,64 @@ export const useKeyboardControls = ({
 }) => {
   const { divisions } = config;
 
-  // Dynamic keyboard mapping: each row is chromatic, each row is one octave higher
-  // Row 0 (ZXCV...): octave 0, steps 0-9
-  // Row 1 (ASDF...): octave 1, steps 0-10
-  // Row 2 (QWERTY...): octave 2, steps 0-12
-  // Row 3 (1234...): octave 3, steps 0-11
+  // Two octaves across 4 rows:
+  // Rows 0+1 (ZXCV + ASDF): Lower octave (steps 0 to divisions-1)
+  // Rows 2+3 (QWERTY + 1234): Upper octave (steps divisions to 2*divisions-1)
 
   const keyboardLayout = {
-    // Row 0 - Base octave
-    z: { octave: 0, step: 0 },
-    x: { octave: 0, step: 1 },
-    c: { octave: 0, step: 2 },
-    v: { octave: 0, step: 3 },
-    b: { octave: 0, step: 4 },
-    n: { octave: 0, step: 5 },
-    m: { octave: 0, step: 6 },
-    ',': { octave: 0, step: 7 },
-    '.': { octave: 0, step: 8 },
-    '/': { octave: 0, step: 9 },
+    // Row 0 - Lower octave part 1 (steps 0-9)
+    z: 0,
+    x: 1,
+    c: 2,
+    v: 3,
+    b: 4,
+    n: 5,
+    m: 6,
+    ',': 7,
+    '.': 8,
+    '/': 9,
 
-    // Row 1 - One octave up
-    a: { octave: 1, step: 0 },
-    s: { octave: 1, step: 1 },
-    d: { octave: 1, step: 2 },
-    f: { octave: 1, step: 3 },
-    g: { octave: 1, step: 4 },
-    h: { octave: 1, step: 5 },
-    j: { octave: 1, step: 6 },
-    k: { octave: 1, step: 7 },
-    l: { octave: 1, step: 8 },
-    ';': { octave: 1, step: 9 },
-    "'": { octave: 1, step: 10 },
+    // Row 1 - Lower octave part 2 (steps 10+)
+    a: 10,
+    s: 11,
+    d: 12,
+    f: 13,
+    g: 14,
+    h: 15,
+    j: 16,
+    k: 17,
+    l: 18,
+    ';': 19,
+    "'": 20,
 
-    // Row 2 - Two octaves up
-    q: { octave: 2, step: 0 },
-    w: { octave: 2, step: 1 },
-    e: { octave: 2, step: 2 },
-    r: { octave: 2, step: 3 },
-    t: { octave: 2, step: 4 },
-    y: { octave: 2, step: 5 },
-    u: { octave: 2, step: 6 },
-    i: { octave: 2, step: 7 },
-    o: { octave: 2, step: 8 },
-    p: { octave: 2, step: 9 },
-    '[': { octave: 2, step: 10 },
-    ']': { octave: 2, step: 11 },
-    '\\': { octave: 2, step: 12 },
+    // Row 2 - Upper octave part 1 (steps 0-12 of next octave)
+    q: divisions + 0,
+    w: divisions + 1,
+    e: divisions + 2,
+    r: divisions + 3,
+    t: divisions + 4,
+    y: divisions + 5,
+    u: divisions + 6,
+    i: divisions + 7,
+    o: divisions + 8,
+    p: divisions + 9,
+    '[': divisions + 10,
+    ']': divisions + 11,
+    '\\': divisions + 12,
 
-    // Row 3 - Three octaves up
-    1: { octave: 3, step: 0 },
-    2: { octave: 3, step: 1 },
-    3: { octave: 3, step: 2 },
-    4: { octave: 3, step: 3 },
-    5: { octave: 3, step: 4 },
-    6: { octave: 3, step: 5 },
-    7: { octave: 3, step: 6 },
-    8: { octave: 3, step: 7 },
-    9: { octave: 3, step: 8 },
-    0: { octave: 3, step: 9 },
-    '-': { octave: 3, step: 10 },
-    '=': { octave: 3, step: 11 },
+    // Row 3 - Upper octave part 2 (steps 0-11 of next octave)
+    1: divisions + 10,
+    2: divisions + 11,
+    3: divisions + 12,
+    4: divisions + 13,
+    5: divisions + 14,
+    6: divisions + 15,
+    7: divisions + 16,
+    8: divisions + 17,
+    9: divisions + 18,
+    0: divisions + 19,
+    '-': divisions + 20,
+    '=': divisions + 21,
   };
 
   useEffect(() => {
@@ -85,19 +83,12 @@ export const useKeyboardControls = ({
     const handleKeyDown = (e) => {
       if (e.repeat) return;
       const key = e.key.toLowerCase();
-      const mapping = keyboardLayout[key];
+      const noteIndex = keyboardLayout[key];
 
-      if (!mapping) return;
-
-      // Check if this step is valid for current TET system
-      if (mapping.step >= divisions) return;
+      if (noteIndex === undefined) return;
+      if (noteIndex >= notes.length) return;
 
       e.preventDefault();
-
-      // Calculate absolute note index: octave * divisions + step
-      const noteIndex = mapping.octave * divisions + mapping.step;
-
-      if (noteIndex >= notes.length) return;
 
       const note = notes[noteIndex];
       const nodes = handleNotePlay(note, true);
@@ -112,11 +103,10 @@ export const useKeyboardControls = ({
 
       if (activeOscillators[key]) {
         const { oscillator, gainNode, id } = activeOscillators[key];
-        const mapping = keyboardLayout[key];
+        const noteIndex = keyboardLayout[key];
 
-        if (!mapping) return;
+        if (noteIndex === undefined) return;
 
-        const noteIndex = mapping.octave * divisions + mapping.step;
         const note = notes[noteIndex];
 
         stopNote(oscillator, gainNode);
