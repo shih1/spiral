@@ -8,6 +8,7 @@ import Instructions from './Instructions';
 import { useAudioManager } from './hooks/useAudioManager';
 import { useKeyboardControls } from './hooks/useKeyboardControls';
 import PerformanceMonitor from './PerformanceMonitor';
+import KeyboardVisualizer from './KeyboardVisualizer';
 
 function App() {
   const [keyboardEnabled, setKeyboardEnabled] = useState(true);
@@ -126,6 +127,11 @@ function App() {
         </div>
       </div>
       {/* Instructions Footer */}
+      <KeyboardVisualizer
+        activePitchClasses={activePitchClasses}
+        heldNotes={heldNotes}
+        releasedNotes={releasedNotes}
+      />
       <Instructions />
     </div>
   );
