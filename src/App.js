@@ -53,7 +53,6 @@ function App() {
     releaseNote,
   } = useAudioManager(config, mixer, reverb);
 
-  // Keyboard controls hook
   useKeyboardControls({
     enabled: keyboardEnabled,
     notes,
@@ -63,6 +62,7 @@ function App() {
     stopNote,
     releaseNote,
     setActiveNote,
+    config, // Add this!
   });
 
   return (
@@ -131,6 +131,7 @@ function App() {
         activePitchClasses={activePitchClasses}
         heldNotes={heldNotes}
         releasedNotes={releasedNotes}
+        config={config} // Add this!
       />
       <Instructions />
     </div>
