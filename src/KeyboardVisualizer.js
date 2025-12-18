@@ -3,14 +3,13 @@ import React from 'react';
 const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, config }) => {
   const { divisions } = config;
 
-  // Two octaves across 4 rows:
-  // Rows 0+1: Lower octave (continuous from step 0)
-  // Rows 2+3: Upper octave (continuous from step divisions)
+  // Complete keyboard layout with all keys
   const keyboardLayout = [
     // Row 3 (top number row) - Upper octave continuation
     {
       row: 3,
       keys: [
+        { code: 'Backquote', key: '`', noteIndex: null, disabled: true },
         { code: 'Digit1', key: '1', noteIndex: divisions + 10 },
         { code: 'Digit2', key: '2', noteIndex: divisions + 11 },
         { code: 'Digit3', key: '3', noteIndex: divisions + 12 },
@@ -23,12 +22,14 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
         { code: 'Digit0', key: '0', noteIndex: divisions + 19 },
         { code: 'Minus', key: '-', noteIndex: divisions + 20 },
         { code: 'Equal', key: '=', noteIndex: divisions + 21 },
+        { code: 'Backspace', key: '⌫', noteIndex: null, disabled: true, wide: true },
       ],
     },
     // Row 2 (QWERTY row) - Upper octave start
     {
       row: 2,
       keys: [
+        { code: 'Tab', key: '⇥', noteIndex: null, disabled: true, wide: true },
         { code: 'KeyQ', key: 'Q', noteIndex: divisions + 0 },
         { code: 'KeyW', key: 'W', noteIndex: divisions + 1 },
         { code: 'KeyE', key: 'E', noteIndex: divisions + 2 },
@@ -48,6 +49,7 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
     {
       row: 1,
       keys: [
+        { code: 'CapsLock', key: '⇪', noteIndex: null, disabled: true, wide: true },
         { code: 'KeyA', key: 'A', noteIndex: 10 },
         { code: 'KeyS', key: 'S', noteIndex: 11 },
         { code: 'KeyD', key: 'D', noteIndex: 12 },
@@ -59,12 +61,14 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
         { code: 'KeyL', key: 'L', noteIndex: 18 },
         { code: 'Semicolon', key: ';', noteIndex: 19 },
         { code: 'Quote', key: "'", noteIndex: 20 },
+        { code: 'Enter', key: '⏎', noteIndex: null, disabled: true, wide: true },
       ],
     },
     // Row 0 (ZXCV row) - Lower octave start
     {
       row: 0,
       keys: [
+        { code: 'ShiftLeft', key: '⇧', noteIndex: null, disabled: true, extraWide: true },
         { code: 'KeyZ', key: 'Z', noteIndex: 0 },
         { code: 'KeyX', key: 'X', noteIndex: 1 },
         { code: 'KeyC', key: 'C', noteIndex: 2 },
@@ -75,28 +79,40 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
         { code: 'Comma', key: ',', noteIndex: 7 },
         { code: 'Period', key: '.', noteIndex: 8 },
         { code: 'Slash', key: '/', noteIndex: 9 },
+        { code: 'ShiftRight', key: '⇧', noteIndex: null, disabled: true, extraWide: true },
       ],
     },
   ];
 
   // Get note label as a fraction
   const getNoteLabel = (noteIndex) => {
+    if (noteIndex === null) return null;
     return `${noteIndex}/${divisions}`;
   };
 
   // Check if a note at this index is currently active
   const isNoteActive = (noteIndex) => {
-    const step = noteIndex % divisions;
-    return activePitchClasses.some((pc) => pc.step === step);
+    if (noteIndex === null) return false;
+    // activePitchClasses contains {pitch, opacity, id, sustained, fadeStartTime}
+    // pitch is the pitch class (0-11 for 12-TET)
+    const pitchClass = noteIndex % divisions;
+    return activePitchClasses.some((pc) => pc.pitch === pitchClass);
   };
 
   // Check if note is held vs releasing
   const isNoteHeld = (noteIndex) => {
-    return heldNotes.some((n) => n.step === noteIndex);
+    if (noteIndex === null) return false;
+    // Check if the note is actively held (not just fading)
+    const pitchClass = noteIndex % divisions;
+    return activePitchClasses.some((pc) => pc.pitch === pitchClass && pc.sustained === true);
   };
 
   // Get key style based on state
-  const getKeyStyle = (noteIndex) => {
+  const getKeyStyle = (noteIndex, disabled) => {
+    if (disabled || noteIndex === null) {
+      return 'bg-gray-800/30 text-gray-600 border-gray-800/50 cursor-not-allowed opacity-40';
+    }
+
     const isActive = isNoteActive(noteIndex);
     const isHeld = isNoteHeld(noteIndex);
 
@@ -112,9 +128,19 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
     }
   };
 
+  // Get key width (scaled to standard key = 48px)
+  const getKeyWidth = (keyData) => {
+    if (keyData.key === '⇧') return 'w-24'; // Shift keys - 2x width
+    if (keyData.key === '⏎') return 'w-20'; // Enter - 1.67x width
+    if (keyData.key === '⇥') return 'w-16'; // Tab - 1.33x width
+    if (keyData.key === '⇪') return 'w-20'; // Caps Lock - 1.67x width
+    if (keyData.key === '⌫') return 'w-20'; // Backspace - 1.67x width
+    return 'w-12'; // Standard key
+  };
+
   // Row offset for visual layout (indent rows)
   const getRowOffset = (row) => {
-    const offsets = { 3: 0, 2: 0, 1: 24, 0: 40 };
+    const offsets = { 3: 0, 2: 0, 1: 0, 0: 0 };
     return offsets[row] || 0;
   };
 
@@ -134,21 +160,28 @@ const KeyboardVisualizer = ({ activePitchClasses, heldNotes, releasedNotes, conf
           >
             {rowData.keys.map((keyData) => {
               const noteLabel = getNoteLabel(keyData.noteIndex);
+              const disabled = keyData.disabled || keyData.noteIndex === null;
 
               return (
                 <div
                   key={keyData.code}
                   className={`
                     relative flex flex-col items-center justify-center
-                    w-12 h-16 rounded-md
+                    ${getKeyWidth(keyData)} h-16 rounded-md
                     font-semibold text-sm
                     transition-all duration-150 ease-out
                     border-2
-                    ${getKeyStyle(keyData.noteIndex)}
+                    ${getKeyStyle(keyData.noteIndex, disabled)}
                   `}
                 >
-                  <div className="text-xs font-bold leading-tight text-center">{noteLabel}</div>
-                  <div className="text-xs mt-1 text-gray-400">{keyData.key}</div>
+                  {!disabled && noteLabel ? (
+                    <>
+                      <div className="text-xs font-bold leading-tight text-center">{noteLabel}</div>
+                      <div className="text-xs mt-1 text-gray-400">{keyData.key}</div>
+                    </>
+                  ) : (
+                    <div className="text-sm text-gray-600">{keyData.key}</div>
+                  )}
                 </div>
               );
             })}

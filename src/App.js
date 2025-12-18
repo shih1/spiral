@@ -32,7 +32,7 @@ function App() {
   });
 
   const [reverb, setReverb] = useState({
-    enabled: false,
+    enabled: true,
     wet: 0.3,
     decay: 2.0,
   });
@@ -126,13 +126,13 @@ function App() {
           />
         </div>
       </div>
-      {/* Instructions Footer */}
       <KeyboardVisualizer
         activePitchClasses={activePitchClasses}
         heldNotes={heldNotes}
         releasedNotes={releasedNotes}
-        config={config} // Add this!
+        config={config}
       />
+      {/* Instructions Footer */}
       <Instructions />
     </div>
   );
