@@ -27,6 +27,7 @@ export const useAudioManager = (config, mixer, reverb) => {
     // Create analyser node
     analyserRef.current = ctx.createAnalyser();
     analyserRef.current.fftSize = 2048;
+    analyserRef.current.smoothingTimeConstant = 0.8;
 
     // Connect masterGain -> analyser -> destination
     masterGainRef.current.connect(analyserRef.current);
@@ -135,10 +136,7 @@ export const useAudioManager = (config, mixer, reverb) => {
               const fadeProgress = Math.min(1, elapsed / (config.releaseTime - 500));
               const newOpacity = Math.max(0, 1 - fadeProgress);
 
-              console.log(`Fading note ${pc.id}: opacity=${newOpacity.toFixed(2)}`);
-
               if (newOpacity <= 0) {
-                console.log(`✅ Removed note ${pc.id}`);
                 return null; // Remove completely faded notes
               }
 
@@ -208,8 +206,6 @@ export const useAudioManager = (config, mixer, reverb) => {
     (noteId, pitchClass) => {
       const now = Date.now();
 
-      console.log('🔵 Releasing note:', noteId);
-
       setHeldNotes((prev) => prev.filter((n) => n.id !== noteId));
       setReleasedNotes((prev) => [...prev, { pitch: pitchClass, time: now, id: noteId }]);
 
@@ -217,7 +213,6 @@ export const useAudioManager = (config, mixer, reverb) => {
       const fadeStartDelay = Math.min(500, config.releaseTime * 0.25);
 
       setTimeout(() => {
-        console.log('🟢 Starting fade for note:', noteId);
         setActivePitchClasses((prev) => {
           return prev.map((pc) => {
             if (pc.id === noteId) {
@@ -244,8 +239,6 @@ export const useAudioManager = (config, mixer, reverb) => {
       const now = Date.now();
       const noteId = nodes.id;
 
-      console.log('🎵 Playing note:', noteId, 'sustained:', sustained);
-
       setActiveNote(note.freq);
 
       if (sustained) {
@@ -262,13 +255,10 @@ export const useAudioManager = (config, mixer, reverb) => {
         opacity: 1,
         id: noteId,
         sustained,
-        fadeStartTime: null, // Will be set when released
+        fadeStartTime: null,
       };
 
-      setActivePitchClasses((prev) => {
-        console.log('Adding pitch class, total will be:', prev.length + 1);
-        return [...prev, newPitchClass];
-      });
+      setActivePitchClasses((prev) => [...prev, newPitchClass]);
 
       if (!sustained) {
         setTimeout(() => setActiveNote(null), 500);
@@ -292,5 +282,6 @@ export const useAudioManager = (config, mixer, reverb) => {
     stopNote,
     releaseNote,
     analyser: analyserRef.current,
+    audioContext: audioContextRef.current,
   };
 };

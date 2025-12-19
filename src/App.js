@@ -17,7 +17,6 @@ function App() {
   const [keyboardEnabled, setKeyboardEnabled] = useState(true);
   const [visualizationMode, setVisualizationMode] = useState('2D'); // '2D' or '3D'
   const [showSettings, setShowSettings] = useState(false);
-  const [showAudioScope, setShowAudioScope] = useState(true);
 
   // Musical State
   const [pressedKeys, setPressedKeys] = useState(new Set());
@@ -52,6 +51,7 @@ function App() {
     stopNote,
     releaseNote,
     analyser,
+    audioContext,
   } = useAudioManager(config, mixer, reverb);
 
   useKeyboardControls({
@@ -86,6 +86,13 @@ function App() {
           <h1 className="text-xl font-bold text-white tracking-wide">Microtonal Spiral</h1>
         </div>
 
+        {/* Audio Visualizer in Header */}
+        <div className="flex-1 max-w-2xl mx-8">
+          {analyser && audioContext && (
+            <AudioVisualizer analyserNode={analyser} audioContext={audioContext} />
+          )}
+        </div>
+
         <div className="flex items-center gap-4">
           {/* Visualization Toggle */}
           <button
@@ -100,14 +107,6 @@ function App() {
             <span className="text-sm font-medium">
               Switch to {visualizationMode === '2D' ? '3D Tower' : '2D Circle'}
             </span>
-          </button>
-
-          {/* Audio Scope Toggle */}
-          <button
-            onClick={() => setShowAudioScope(!showAudioScope)}
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-white border border-gray-600 transition-all text-sm"
-          >
-            {showAudioScope ? 'Hide' : 'Show'} Audio Scope
           </button>
 
           <label className="flex items-center text-white text-sm cursor-pointer hover:text-blue-300 transition-colors">
@@ -161,9 +160,6 @@ function App() {
               releasedNotes={releasedNotes}
             />
           )}
-
-          {/* Audio Scope */}
-          {showAudioScope && analyser && <AudioVisualizer analyserNode={analyser} />}
         </div>
       </div>
 
