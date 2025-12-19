@@ -18,7 +18,6 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
 
   const getNoteColor = (absoluteStep, alpha = 1) => {
     const hue = (absoluteStep / (divisions * octaves)) * 360;
-    // Lightness is now locked at 60% for both front and back
     return `hsla(${hue}, 80%, 60%, ${alpha})`;
   };
 
@@ -36,7 +35,6 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
     const handleMouseUp = () => {
       isDragging.current = false;
     };
-
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -80,12 +78,10 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         let x = Math.cos(rotatedTheta) * towerRadius;
         let z = Math.sin(rotatedTheta) * towerRadius;
         let y = -space.z * towerHeight;
-
         const cosP = Math.cos(pitchRef.current);
         const sinP = Math.sin(pitchRef.current);
         const yNew = y * sinP - z * cosP;
         const zNew = y * cosP + z * sinP;
-
         const factor = perspective / (perspective + zNew + 400);
         return {
           px: centerX + x * factor,
@@ -96,8 +92,16 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         };
       };
 
-      // 1. VERTICAL RIBS (White)
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      // 1. DATA PREP
+      const now = Date.now();
+      const allActive = [...heldNotes, ...releasedNotes.filter((n) => now - n.time < releaseTime)];
+      const currentPoints = allActive.map((note) => {
+        const abs = note.pitch + note.octave * divisions;
+        return { ...project3D(getCoordinates(abs)), color: getNoteColor(abs) };
+      });
+
+      // 2. WHITE STRUCTURAL RIBS
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
       ctx.lineWidth = 1;
       for (let d = 0; d < divisions; d++) {
         ctx.beginPath();
@@ -109,64 +113,69 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         ctx.stroke();
       }
 
-      // 2. HELIX RENDERING
-      const segmentsPerNote = 8; // Increased resolution for smoother transitions
-      const totalSteps = divisions * octaves * segmentsPerNote;
-
       const drawHelixPass = (drawFront) => {
-        for (let i = 0; i < totalSteps; i++) {
-          const step1 = i / segmentsPerNote;
-          const step2 = (i + 1) / segmentsPerNote;
-
-          const p1 = project3D(getCoordinates(step1));
-          const p2 = project3D(getCoordinates(step2));
-
-          // Draw only if the segment matches the current pass (Front or Back)
+        const segmentsPerNote = 8;
+        for (let i = 0; i < divisions * octaves * segmentsPerNote; i++) {
+          const p1 = project3D(getCoordinates(i / segmentsPerNote));
+          const p2 = project3D(getCoordinates((i + 1) / segmentsPerNote));
           if (!p1 || !p2 || p1.isFront !== drawFront) continue;
-
           ctx.beginPath();
           ctx.moveTo(p1.px, p1.py);
           ctx.lineTo(p2.px, p2.py);
-
-          // No more opacity difference between passes
-          ctx.strokeStyle = getNoteColor(step1, 0.8);
+          ctx.strokeStyle = getNoteColor(i / segmentsPerNote, 0.8);
           ctx.lineWidth = (drawFront ? 3 : 2) * p1.scale;
           ctx.stroke();
         }
       };
 
-      // Back Pass
+      // 3. BACK HELIX
       drawHelixPass(false);
 
-      // 3. ACTIVE NOTES
-      const now = Date.now();
-      const allActive = [...heldNotes, ...releasedNotes.filter((n) => now - n.time < releaseTime)];
+      // 4. THE CRYSTAL (3D Mesh)
+      if (currentPoints.length >= 3) {
+        // Draw Faces
+        for (let i = 0; i < currentPoints.length; i++) {
+          for (let j = i + 1; j < currentPoints.length; j++) {
+            for (let k = j + 1; k < currentPoints.length; k++) {
+              ctx.beginPath();
+              ctx.moveTo(currentPoints[i].px, currentPoints[i].py);
+              ctx.lineTo(currentPoints[j].px, currentPoints[j].py);
+              ctx.lineTo(currentPoints[k].px, currentPoints[k].py);
+              ctx.closePath();
 
-      allActive.forEach((note) => {
-        const absoluteStep = note.pitch + note.octave * divisions;
-        const p = project3D(getCoordinates(absoluteStep));
-        let fade = note.time ? Math.max(0, 1 - (now - note.time) / releaseTime) : 1.0;
-        const size = (note.time ? 7 : 12) * p.scale;
+              const avgZ =
+                (currentPoints[i].zDepth + currentPoints[j].zDepth + currentPoints[k].zDepth) / 3;
+              const opacity = avgZ < 0 ? 0.08 : 0.02;
+              ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+              ctx.fill();
+            }
+          }
+        }
+        // Draw Wireframe Connections
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i < currentPoints.length; i++) {
+          for (let j = i + 1; j < currentPoints.length; j++) {
+            ctx.beginPath();
+            ctx.moveTo(currentPoints[i].px, currentPoints[i].py);
+            ctx.lineTo(currentPoints[j].px, currentPoints[j].py);
+            ctx.stroke();
+          }
+        }
+      }
 
-        const noteColor = getNoteColor(absoluteStep, fade);
-        ctx.shadowBlur = 20 * fade;
-        ctx.shadowColor = noteColor;
-        ctx.fillStyle = noteColor;
-
+      // 5. ACTIVE NOTES
+      currentPoints.forEach((p) => {
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = p.color;
+        ctx.fillStyle = p.color;
         ctx.beginPath();
-        ctx.arc(p.px, p.py, size, 0, Math.PI * 2);
+        ctx.arc(p.px, p.py, 8 * p.scale, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
-
-        if (fade > 0.3) {
-          ctx.font = `bold ${11 * p.scale}px monospace`;
-          ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
-          const labels = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-          ctx.fillText(labels[note.pitch % 12], p.px + size + 6, p.py + 4);
-        }
       });
 
-      // Front Pass
+      // 6. FRONT HELIX
       drawHelixPass(true);
 
       animationFrameRef.current = requestAnimationFrame(render);
@@ -177,7 +186,7 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
   }, [heldNotes, releasedNotes, getCoordinates, divisions, octaves, releaseTime]);
 
   return (
-    <div className="relative group cursor-move flex justify-center items-center bg-[#020205] p-6">
+    <div className="relative flex justify-center items-center bg-[#020205] p-6">
       <canvas
         ref={canvasRef}
         width={width}
