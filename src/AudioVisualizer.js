@@ -19,7 +19,8 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
     const width = canvas.width;
     const height = canvas.height;
 
-    analyserNode.fftSize = 4096;
+    analyserNode.fftSize = 16384;
+    analyserNode.smoothingTimeConstant = 0.8;
     const bufferLength = analyserNode.frequencyBinCount;
     const timeDataArray = new Uint8Array(bufferLength);
     const freqDataArray = new Uint8Array(bufferLength);
@@ -126,10 +127,22 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
           const binIndex = (freq / nyquist) * bufferLength;
           const i = Math.floor(binIndex);
           const fraction = binIndex - i;
-          const val =
-            i < bufferLength - 1
-              ? freqDataArray[i] * (1 - fraction) + freqDataArray[i + 1] * fraction
-              : freqDataArray[i];
+
+          // Better interpolation with boundary checking
+          let val;
+          if (i < bufferLength - 1) {
+            val = freqDataArray[i] * (1 - fraction) + freqDataArray[i + 1] * fraction;
+          } else if (i < bufferLength) {
+            val = freqDataArray[i];
+          } else {
+            val = 0;
+          }
+
+          // Additional smoothing for low frequencies (below 200 Hz)
+          if (freq < 200 && x > 0) {
+            const prevPoint = points[x - 1];
+            val = val * 0.7 + (prevPoint ? ((height - prevPoint.y) / height) * 255 : val) * 0.3;
+          }
 
           const y = height - (val / 255) * height;
           points.push({ x: xOffset + x, y });
@@ -216,8 +229,8 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
       </div>
       <canvas
         ref={canvasRef}
-        width={1000}
-        height={200}
+        width={2048}
+        height={300}
         className="w-full h-48 bg-black/20 rounded-lg border border-white/5"
       />
     </div>
