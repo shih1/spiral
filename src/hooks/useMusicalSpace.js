@@ -1,10 +1,5 @@
 import { useMemo, useCallback } from 'react';
 
-/**
- * Translates musical notes into a 3D coordinate system.
- * X/Y: Represents the Pitch Class (0 to 1 normalized circle)
- * Z: Represents the Octave (linear height)
- */
 export const useMusicalSpace = (config) => {
   const { divisions } = config;
 
@@ -13,18 +8,18 @@ export const useMusicalSpace = (config) => {
       if (noteIndex === null || noteIndex === undefined) return null;
 
       const pitchClass = noteIndex % divisions;
-      const octave = Math.floor(noteIndex / divisions);
+      // Continuous Z: each step is 1/N of an octave height
+      const continuousZ = noteIndex / divisions;
 
-      // Calculate Angle (Theta)
-      // -Math.PI / 2 rotates the circle so 0/C is at the top (12 o'clock)
+      // Angle (Theta) remains the same for pitch class alignment
       const theta = (pitchClass / divisions) * 2 * Math.PI - Math.PI / 2;
 
       return {
-        x: Math.cos(theta), // Normalized -1 to 1
-        y: Math.sin(theta), // Normalized -1 to 1
-        z: octave, // Discrete octave index
+        x: Math.cos(theta),
+        y: Math.sin(theta),
+        z: continuousZ, // Now a float (0.0, 0.083, 0.166...)
         pitchClass,
-        octave,
+        octave: Math.floor(continuousZ),
         theta,
       };
     },
