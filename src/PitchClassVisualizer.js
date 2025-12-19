@@ -45,12 +45,12 @@ const CHORD_LIBRARY = {
   '7#11': [0, 4, 7, 10, 18],
 };
 
-const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
+const PitchClassVisualizer = ({ config, heldNotes }) => {
   const canvasRef = useRef(null);
   const staticLayerRef = useRef(null);
   const animationFrameRef = useRef(null);
 
-  const { divisions, releaseTime } = config;
+  const { divisions } = config;
   const { getCoordinates } = useMusicalSpace(config);
 
   const width = 700;
@@ -66,17 +66,14 @@ const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
     size: 6 + coords.z * 2.5,
   });
 
-  // IMMEDIATE DETECTION
+  // CHORD DETECTION
   const immediateChord = useMemo(() => {
     if (heldNotes.length < 2) return null;
-
     const uniquePC = Array.from(new Set(heldNotes.map((n) => n.pitch % 12))).sort((a, b) => a - b);
-
     for (let i = 0; i < uniquePC.length; i++) {
       const root = uniquePC[i];
       const intervals = uniquePC.map((p) => (p - root + 12) % 12).sort((a, b) => a - b);
       const signature = intervals.join(',');
-
       for (const [name, pattern] of Object.entries(CHORD_LIBRARY)) {
         const patternSig = pattern
           .map((p) => p % 12)
@@ -123,7 +120,6 @@ const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
     sCanvas.width = width;
     sCanvas.height = height;
     const sCtx = sCanvas.getContext('2d');
-
     const bgGradient = sCtx.createRadialGradient(
       centerX,
       centerY,
@@ -147,10 +143,8 @@ const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
       sCtx.lineTo(pos.x, pos.y);
       sCtx.stroke();
 
-      // Rotated Label Position Logic
       const labelX = centerX - Math.sin(coords.theta) * (radius + 25);
       const labelY = centerY + Math.cos(coords.theta) * (radius + 25);
-
       sCtx.fillStyle = 'rgba(150, 150, 150, 0.5)';
       sCtx.font = '10px "JetBrains Mono", monospace';
       sCtx.textAlign = 'center';
@@ -158,18 +152,15 @@ const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
     }
   }, [divisions, getCoordinates]);
 
-  // Synchronous Loop
+  // Synchronous Render Loop
   useLayoutEffect(() => {
     const ctx = canvasRef.current.getContext('2d', { alpha: false });
 
     const render = () => {
       ctx.drawImage(staticLayerRef.current, 0, 0);
-      const now = Date.now();
-      const activeReleased = releasedNotes.filter((n) => now - n.time < releaseTime);
-      const allActive = [...heldNotes, ...activeReleased];
 
-      if (allActive.length >= 3) {
-        const points = allActive.map((n) =>
+      if (heldNotes.length >= 3) {
+        const points = heldNotes.map((n) =>
           project(getCoordinates(n.pitch + n.octave * divisions))
         );
         const hull = getConvexHull(points);
@@ -177,10 +168,10 @@ const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
         hull.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
         ctx.closePath();
 
-        const color = immediateChord ? 'rgba(255, 200, 50, ' : 'rgba(0, 255, 255, ';
-        ctx.fillStyle = color + '0.15)';
+        const color = immediateChord ? '255, 200, 50' : '0, 255, 255';
+        ctx.fillStyle = `rgba(${color}, 0.15)`;
         ctx.fill();
-        ctx.strokeStyle = immediateChord ? 'rgba(255, 200, 50, 0.8)' : 'rgba(0, 255, 255, 0.5)';
+        ctx.strokeStyle = `rgba(${color}, ${immediateChord ? 0.8 : 0.5})`;
         ctx.lineWidth = immediateChord ? 3 : 1.5;
         if (!immediateChord) ctx.setLineDash([4, 4]);
         ctx.stroke();
@@ -194,21 +185,21 @@ const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
         }
       }
 
-      allActive.forEach((n) => {
+      heldNotes.forEach((n) => {
         const pos = project(getCoordinates(n.pitch + n.octave * divisions));
-        const fade = n.time ? Math.max(0, 1 - (now - n.time) / releaseTime) : 1.0;
 
-        ctx.strokeStyle = `rgba(0, 255, 136, ${fade * 0.15})`;
+        ctx.strokeStyle = `rgba(0, 255, 136, 0.15)`;
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
         ctx.lineTo(pos.x, pos.y);
         ctx.stroke();
 
-        ctx.fillStyle = `rgba(0, 255, 136, ${fade * 0.2})`;
+        ctx.fillStyle = `rgba(0, 255, 136, 0.2)`;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, pos.size * 2, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
+
+        ctx.fillStyle = `rgba(255, 255, 255, 1.0)`;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, pos.size / 2, 0, Math.PI * 2);
         ctx.fill();
@@ -219,7 +210,7 @@ const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
 
     render();
     return () => cancelAnimationFrame(animationFrameRef.current);
-  }, [heldNotes, releasedNotes, immediateChord, releaseTime, divisions]);
+  }, [heldNotes, immediateChord, divisions]);
 
   return (
     <canvas
