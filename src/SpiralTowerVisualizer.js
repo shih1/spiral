@@ -68,8 +68,8 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
 
       const centerX = width / 2;
       const centerY = height / 2 + Math.cos(pitchRef.current) * 100;
-      const towerRadius = 180;
-      const towerHeight = 140;
+      const towerRadius = 250;
+      const towerHeight = 280;
       const perspective = 1000;
 
       const project3D = (space) => {
@@ -83,8 +83,8 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         const yNew = y * sinP - z * cosP;
         const zNew = y * cosP + z * sinP;
 
-        const zFinal = zNew + 400;
-        if (zFinal <= 0) return null; // Avoid division by zero
+        const zFinal = zNew + 800;
+        if (zFinal <= 10) return null; // Avoid division by zero and very close objects
 
         const factor = perspective / (perspective + zFinal);
         const px = centerX + x * factor;
@@ -108,7 +108,7 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         .filter((p) => p !== null);
 
       // 2. WHITE RIBS
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
       ctx.lineWidth = 1;
       for (let d = 0; d < divisions; d++) {
         ctx.beginPath();
