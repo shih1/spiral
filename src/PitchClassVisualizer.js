@@ -3,15 +3,12 @@ import { useMusicalSpace } from './hooks/useMusicalSpace';
 
 // EXPANDED CHORD LIBRARY
 const CHORD_LIBRARY = {
-  // Triads
   Major: [0, 4, 7],
   Minor: [0, 3, 7],
   Diminished: [0, 3, 6],
   Augmented: [0, 4, 8],
   Sus2: [0, 2, 7],
   Sus4: [0, 5, 7],
-
-  // Sevenths
   'Dominant 7': [0, 4, 7, 10],
   'Major 7': [0, 4, 7, 11],
   'Minor 7': [0, 3, 7, 10],
@@ -20,15 +17,11 @@ const CHORD_LIBRARY = {
   'Diminished 7': [0, 3, 6, 9],
   'Augmented Major 7': [0, 4, 8, 11],
   '7sus4': [0, 5, 7, 10],
-
-  // Added & 6ths
   Add9: [0, 4, 7, 14],
   mAdd9: [0, 3, 7, 14],
   6: [0, 4, 7, 9],
   m6: [0, 3, 7, 9],
   '6/9': [0, 4, 7, 9, 14],
-
-  // Extended
   9: [0, 4, 7, 10, 14],
   Maj9: [0, 4, 7, 11, 14],
   m9: [0, 3, 7, 10, 14],
@@ -36,8 +29,6 @@ const CHORD_LIBRARY = {
   m11: [0, 3, 7, 10, 14, 17],
   13: [0, 4, 7, 10, 14, 21],
   Maj13: [0, 4, 7, 11, 14, 21],
-
-  // Altered
   '7b5': [0, 4, 6, 10],
   '7#5': [0, 4, 8, 10],
   '7b9': [0, 4, 7, 10, 13],
@@ -49,6 +40,9 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
   const canvasRef = useRef(null);
   const staticLayerRef = useRef(null);
   const animationFrameRef = useRef(null);
+
+  // Track intensity (0.0 - 1.0) for every possible MIDI note
+  const glowStatesRef = useRef({});
 
   const { divisions } = config;
   const { getCoordinates } = useMusicalSpace(config);
@@ -63,10 +57,12 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     bgInner: '#0a0c14',
     bgOuter: '#020205',
     wireframe: 'rgba(255, 255, 255, 0.05)',
-    labels: 'rgba(200, 210, 230, 0.6)', // Brightened labels
+    labels: 'rgba(200, 210, 230, 0.6)',
     activeNode: '45, 212, 191',
     detectedChordBorder: 'rgba(45, 212, 191, 0.8)',
     genericHullBorder: 'rgba(255, 255, 255, 0.6)',
+    attack: 0.2, // How fast it fades in (0.2 = fast)
+    release: 0.04, // How slow it fades out (0.04 = gentle decay)
   };
 
   const project = (coords) => ({
@@ -121,7 +117,6 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     return lower.concat(upper);
   };
 
-  // Pre-render Static Wireframe and Labels
   useLayoutEffect(() => {
     if (!staticLayerRef.current) staticLayerRef.current = document.createElement('canvas');
     const sCanvas = staticLayerRef.current;
@@ -145,16 +140,12 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     for (let i = 0; i < divisions; i++) {
       const coords = getCoordinates(i);
       const pos = project(coords);
-
-      // Wireframe Lines
       sCtx.strokeStyle = THEME.wireframe;
-      sCtx.lineWidth = 1;
       sCtx.beginPath();
       sCtx.moveTo(centerX, centerY);
       sCtx.lineTo(pos.x, pos.y);
       sCtx.stroke();
 
-      // More Visible Labels
       const labelX = centerX - Math.sin(coords.theta) * (radius + 45);
       const labelY = centerY + Math.cos(coords.theta) * (radius + 45);
       sCtx.fillStyle = THEME.labels;
@@ -170,10 +161,34 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     const render = () => {
       ctx.drawImage(staticLayerRef.current, 0, 0);
 
+      // 1. Identify currently held note IDs
+      const activeIds = new Set(heldNotes.map((n) => `${n.pitch}_${n.octave}`));
+
+      // 2. Update Glow Intensities (Envelope)
+      // We check all IDs currently in our tracker plus new ones coming from heldNotes
+      const allIds = new Set([...Object.keys(glowStatesRef.current), ...activeIds]);
+
+      allIds.forEach((id) => {
+        if (!glowStatesRef.current[id]) glowStatesRef.current[id] = 0;
+
+        if (activeIds.has(id)) {
+          // ATTACK: Move toward 1.0
+          glowStatesRef.current[id] = Math.min(1, glowStatesRef.current[id] + THEME.attack);
+        } else {
+          // RELEASE: Decay toward 0.0
+          glowStatesRef.current[id] = Math.max(0, glowStatesRef.current[id] - THEME.release);
+        }
+
+        // Cleanup fully decayed notes
+        if (glowStatesRef.current[id] <= 0 && !activeIds.has(id)) {
+          delete glowStatesRef.current[id];
+        }
+      });
+
+      // 3. Draw Geometry (Only for physically held notes)
       const currentPoints = heldNotes.map((n) =>
         project(getCoordinates(n.pitch + n.octave * divisions))
       );
-
       if (currentPoints.length >= 3) {
         const hull = getConvexHull(currentPoints);
         ctx.beginPath();
@@ -184,7 +199,6 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
         const isChord = !!immediateChord;
         ctx.fillStyle = isChord ? `rgba(${THEME.activeNode}, 0.1)` : `rgba(255, 255, 255, 0.05)`;
         ctx.fill();
-
         ctx.strokeStyle = isChord ? THEME.detectedChordBorder : THEME.genericHullBorder;
         ctx.lineWidth = isChord ? 2 : 1.5;
         ctx.stroke();
@@ -198,9 +212,14 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
         }
       }
 
-      currentPoints.forEach((pos) => {
+      // 4. Draw Glows (Using the Envelope Intensity)
+      Object.entries(glowStatesRef.current).forEach(([id, intensity]) => {
+        const [pitch, octave] = id.split('_').map(Number);
+        const pos = project(getCoordinates(pitch + octave * divisions));
+
+        // Note Glow
         const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, pos.size * 5);
-        glow.addColorStop(0, `rgba(${THEME.activeNode}, 0.5)`);
+        glow.addColorStop(0, `rgba(${THEME.activeNode}, ${0.5 * intensity})`);
         glow.addColorStop(1, `rgba(${THEME.activeNode}, 0)`);
 
         ctx.fillStyle = glow;
@@ -208,7 +227,8 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
         ctx.arc(pos.x, pos.y, pos.size * 5, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = '#ffffff';
+        // White Core (Also fades)
+        ctx.fillStyle = `rgba(255, 255, 255, ${intensity})`;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, pos.size / 2.5, 0, Math.PI * 2);
         ctx.fill();
