@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef, useMemo } from 'react';
 import { useMusicalSpace } from './hooks/useMusicalSpace';
 
-// EXPANDED CHORD LIBRARY
+// EXPANDED CHORD LIBRARY (Semitone-based)
 const CHORD_LIBRARY = {
   Major: [0, 4, 7],
   Minor: [0, 3, 7],
@@ -36,12 +36,17 @@ const CHORD_LIBRARY = {
   '7#11': [0, 4, 7, 10, 18],
 };
 
+// Convert the library to Octave Ratios (0.0 to 1.0) for N-TET compatibility
+const NORM_CHORD_LIBRARY = Object.entries(CHORD_LIBRARY).reduce((acc, [name, pattern]) => {
+  acc[name] = pattern.map((p) => (p % 12) / 12);
+  return acc;
+}, {});
+
 const PitchClassVisualizer = ({ config, heldNotes }) => {
   const canvasRef = useRef(null);
   const staticLayerRef = useRef(null);
   const animationFrameRef = useRef(null);
 
-  // Track intensity (0.0 - 1.0) for every possible MIDI note
   const glowStatesRef = useRef({});
 
   const { divisions } = config;
@@ -61,8 +66,8 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     activeNode: '45, 212, 191',
     detectedChordBorder: 'rgba(45, 212, 191, 0.8)',
     genericHullBorder: 'rgba(255, 255, 255, 0.6)',
-    attack: 0.2, // How fast it fades in (0.2 = fast)
-    release: 0.04, // How slow it fades out (0.04 = gentle decay)
+    attack: 0.2,
+    release: 0.04,
   };
 
   const project = (coords) => ({
@@ -71,23 +76,43 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     size: 5 + coords.z * 2,
   });
 
+  // EXACT MATCHING LOGIC FOR N-TET
   const immediateChord = useMemo(() => {
     if (heldNotes.length < 2) return null;
-    const uniquePC = Array.from(new Set(heldNotes.map((n) => n.pitch % 12))).sort((a, b) => a - b);
+
+    // 1. Normalize held notes to unique pitch classes within the current scale divisions
+    const uniquePC = Array.from(new Set(heldNotes.map((n) => n.pitch % divisions))).sort(
+      (a, b) => a - b
+    );
+
+    // 2. Iterate through each held note as a potential root
     for (let i = 0; i < uniquePC.length; i++) {
       const root = uniquePC[i];
-      const intervals = uniquePC.map((p) => (p - root + 12) % 12).sort((a, b) => a - b);
-      const signature = intervals.join(',');
-      for (const [name, pattern] of Object.entries(CHORD_LIBRARY)) {
-        const patternSig = pattern
-          .map((p) => p % 12)
-          .sort((a, b) => a - b)
-          .join(',');
-        if (patternSig === signature) return name;
+
+      // Calculate relative intervals (steps) from current root
+      const currentSteps = uniquePC
+        .map((p) => (p - root + divisions) % divisions)
+        .sort((a, b) => a - b);
+
+      // 3. Compare with Normalized Library
+      for (const [name, ratios] of Object.entries(NORM_CHORD_LIBRARY)) {
+        if (ratios.length !== currentSteps.length) continue;
+
+        // Check if every interval ratio maps to an EXACT whole-number step in current divisions
+        const isExactMatch = ratios.every((ratio, index) => {
+          const expectedStep = ratio * divisions;
+          const roundedStep = Math.round(expectedStep);
+
+          // Use a small epsilon for floating point safety
+          const isScaleAligned = Math.abs(expectedStep - roundedStep) < 0.001;
+          return isScaleAligned && roundedStep === currentSteps[index];
+        });
+
+        if (isExactMatch) return name;
       }
     }
     return null;
-  }, [heldNotes]);
+  }, [heldNotes, divisions]);
 
   const getConvexHull = (points) => {
     if (points.length <= 2) return points;
@@ -161,34 +186,25 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     const render = () => {
       ctx.drawImage(staticLayerRef.current, 0, 0);
 
-      // 1. Identify currently held note IDs
       const activeIds = new Set(heldNotes.map((n) => `${n.pitch}_${n.octave}`));
-
-      // 2. Update Glow Intensities (Envelope)
-      // We check all IDs currently in our tracker plus new ones coming from heldNotes
       const allIds = new Set([...Object.keys(glowStatesRef.current), ...activeIds]);
 
       allIds.forEach((id) => {
         if (!glowStatesRef.current[id]) glowStatesRef.current[id] = 0;
-
         if (activeIds.has(id)) {
-          // ATTACK: Move toward 1.0
           glowStatesRef.current[id] = Math.min(1, glowStatesRef.current[id] + THEME.attack);
         } else {
-          // RELEASE: Decay toward 0.0
           glowStatesRef.current[id] = Math.max(0, glowStatesRef.current[id] - THEME.release);
         }
-
-        // Cleanup fully decayed notes
         if (glowStatesRef.current[id] <= 0 && !activeIds.has(id)) {
           delete glowStatesRef.current[id];
         }
       });
 
-      // 3. Draw Geometry (Only for physically held notes)
       const currentPoints = heldNotes.map((n) =>
         project(getCoordinates(n.pitch + n.octave * divisions))
       );
+
       if (currentPoints.length >= 3) {
         const hull = getConvexHull(currentPoints);
         ctx.beginPath();
@@ -212,12 +228,10 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
         }
       }
 
-      // 4. Draw Glows (Using the Envelope Intensity)
       Object.entries(glowStatesRef.current).forEach(([id, intensity]) => {
         const [pitch, octave] = id.split('_').map(Number);
         const pos = project(getCoordinates(pitch + octave * divisions));
 
-        // Note Glow
         const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, pos.size * 5);
         glow.addColorStop(0, `rgba(${THEME.activeNode}, ${0.5 * intensity})`);
         glow.addColorStop(1, `rgba(${THEME.activeNode}, 0)`);
@@ -227,7 +241,6 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
         ctx.arc(pos.x, pos.y, pos.size * 5, 0, Math.PI * 2);
         ctx.fill();
 
-        // White Core (Also fades)
         ctx.fillStyle = `rgba(255, 255, 255, ${intensity})`;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, pos.size / 2.5, 0, Math.PI * 2);
