@@ -4,7 +4,7 @@ import { Activity, BarChart3 } from 'lucide-react';
 const AudioVisualizer = ({ analyserNode, audioContext }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
-  const [mode, setMode] = useState('oscilloscope');
+  const [mode, setMode] = useState('split'); // 'oscilloscope', 'fft', or 'split'
 
   useEffect(() => {
     if (!analyserNode || !canvasRef.current || !audioContext) return;
@@ -21,22 +21,29 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
 
     const sampleRate = audioContext.sampleRate;
 
-    // More stable trigger with hysteresis
+    // Stable trigger - RISING EDGE ONLY
+    let lastTriggerPoint = 0;
     const findStableTrigger = (data) => {
       const threshold = 128;
-      const hysteresis = 5;
+      const hysteresis = 10;
 
-      // Look for strong upward zero crossing
+      // Only look for rising edge (positive slope through threshold)
       for (let i = 100; i < data.length - 100; i++) {
-        if (data[i] <= threshold - hysteresis && data[i + 1] >= threshold + hysteresis) {
-          // Verify it's a real crossing by checking slope
-          const slope = data[i + 1] - data[i];
-          if (slope > 10) {
+        const current = data[i];
+        const next = data[i + 1];
+
+        // Rising edge: below threshold, then above threshold
+        if (current < threshold - hysteresis && next > threshold + hysteresis) {
+          // Strong positive slope only
+          const slope = next - current;
+          if (slope > 15) {
+            lastTriggerPoint = i;
             return i;
           }
         }
       }
-      return 0;
+      // If no good trigger found, use last known good trigger
+      return lastTriggerPoint;
     };
 
     const draw = () => {
@@ -114,24 +121,25 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
         ctx.fillText('+1', 5, 12);
         ctx.fillText('0', 5, height / 2 + 4);
         ctx.fillText('-1', 5, height - 5);
-      } else {
+      } else if (mode === 'fft') {
         // FFT mode
         analyserNode.getByteFrequencyData(freqDataArray);
 
         ctx.fillStyle = 'rgb(15, 15, 25)';
         ctx.fillRect(0, 0, width, height);
 
-        // Draw frequency grid
+        // Draw frequency grid - logarithmic scale
         ctx.strokeStyle = 'rgba(60, 60, 80, 0.3)';
         ctx.lineWidth = 1;
 
-        // Logarithmic frequency markers
-        const freqMarkers = [100, 200, 500, 1000, 2000, 5000, 10000];
+        const freqMarkers = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 15000, 20000];
         const nyquist = sampleRate / 2;
 
         freqMarkers.forEach((freq) => {
           if (freq < nyquist) {
-            const x = (freq / nyquist) * width;
+            // Logarithmic position
+            const logPos = Math.log10(freq) / Math.log10(nyquist);
+            const x = logPos * width;
             ctx.beginPath();
             ctx.moveTo(x, 0);
             ctx.lineTo(x, height);
@@ -139,16 +147,22 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
           }
         });
 
-        // Draw bars
-        const barsToShow = Math.min(512, bufferLength);
-        const barWidth = width / barsToShow;
+        // Draw bars with logarithmic frequency spacing
+        const numBars = 200;
+        for (let i = 0; i < numBars; i++) {
+          // Map bar index to frequency bin logarithmically
+          const logFreq = (i / numBars) * Math.log10(nyquist);
+          const freq = Math.pow(10, logFreq);
+          const binIndex = Math.floor((freq / nyquist) * bufferLength);
 
-        for (let i = 0; i < barsToShow; i++) {
-          const barHeight = (freqDataArray[i] / 255) * height;
+          if (binIndex < bufferLength) {
+            const barHeight = (freqDataArray[binIndex] / 255) * height;
+            const barWidth = width / numBars;
 
-          const hue = 200 - (i / barsToShow) * 60;
-          ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-          ctx.fillRect(i * barWidth, height - barHeight, barWidth - 1, barHeight);
+            const hue = 200 - (i / numBars) * 60;
+            ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+            ctx.fillRect(i * barWidth, height - barHeight, barWidth - 1, barHeight);
+          }
         }
 
         // Draw frequency labels
@@ -157,9 +171,113 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
 
         freqMarkers.forEach((freq) => {
           if (freq < nyquist) {
-            const x = (freq / nyquist) * width;
+            const logPos = Math.log10(freq) / Math.log10(nyquist);
+            const x = logPos * width;
             const label = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
             ctx.fillText(label, x + 2, height - 5);
+          }
+        });
+      } else {
+        // Split screen mode
+        analyserNode.getByteTimeDomainData(timeDataArray);
+        analyserNode.getByteFrequencyData(freqDataArray);
+
+        const halfWidth = width / 2;
+
+        // LEFT SIDE: Oscilloscope
+        ctx.fillStyle = 'rgb(15, 15, 25)';
+        ctx.fillRect(0, 0, halfWidth, height);
+
+        // Grid for oscilloscope
+        ctx.strokeStyle = 'rgba(60, 60, 80, 0.3)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+          const y = (height / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(halfWidth, y);
+          ctx.stroke();
+        }
+
+        const triggerPoint = findStableTrigger(timeDataArray);
+        const samplesToShow = Math.min(1024, bufferLength - triggerPoint);
+        const sliceWidth = halfWidth / samplesToShow;
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgb(0, 220, 255)';
+        ctx.beginPath();
+
+        let x = 0;
+        for (let i = 0; i < samplesToShow; i++) {
+          const v = timeDataArray[triggerPoint + i] / 128.0;
+          const y = (v * height) / 2;
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+          x += sliceWidth;
+        }
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.7)';
+        ctx.font = '9px monospace';
+        const timePerSample = 1000 / sampleRate;
+        const totalTimeMs = samplesToShow * timePerSample;
+        ctx.fillText(`${(totalTimeMs / 2).toFixed(1)}ms`, halfWidth / 2 - 15, height - 5);
+
+        // Divider line
+        ctx.strokeStyle = 'rgba(100, 100, 120, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(halfWidth, 0);
+        ctx.lineTo(halfWidth, height);
+        ctx.stroke();
+
+        // RIGHT SIDE: FFT
+        ctx.fillStyle = 'rgb(15, 15, 25)';
+        ctx.fillRect(halfWidth, 0, halfWidth, height);
+
+        const freqMarkers = [100, 1000, 5000, 10000, 20000];
+        const nyquist = sampleRate / 2;
+
+        freqMarkers.forEach((freq) => {
+          if (freq < nyquist) {
+            const logPos = Math.log10(freq) / Math.log10(nyquist);
+            const xPos = halfWidth + logPos * halfWidth;
+            ctx.strokeStyle = 'rgba(60, 60, 80, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(xPos, 0);
+            ctx.lineTo(xPos, height);
+            ctx.stroke();
+          }
+        });
+
+        const numBars = 100;
+        for (let i = 0; i < numBars; i++) {
+          const logFreq = (i / numBars) * Math.log10(nyquist);
+          const freq = Math.pow(10, logFreq);
+          const binIndex = Math.floor((freq / nyquist) * bufferLength);
+
+          if (binIndex < bufferLength) {
+            const barHeight = (freqDataArray[binIndex] / 255) * height;
+            const barWidth = halfWidth / numBars;
+
+            const hue = 200 - (i / numBars) * 60;
+            ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+            ctx.fillRect(halfWidth + i * barWidth, height - barHeight, barWidth - 1, barHeight);
+          }
+        }
+
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.7)';
+        ctx.font = '9px monospace';
+        freqMarkers.forEach((freq) => {
+          if (freq < nyquist) {
+            const logPos = Math.log10(freq) / Math.log10(nyquist);
+            const xPos = halfWidth + logPos * halfWidth;
+            const label = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
+            ctx.fillText(label, xPos + 2, height - 5);
           }
         });
       }
@@ -183,19 +301,51 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
               <Activity size={14} className="text-cyan-400" />
               <span>Scope</span>
             </>
-          ) : (
+          ) : mode === 'fft' ? (
             <>
               <BarChart3 size={14} className="text-purple-400" />
               <span>Spectrum</span>
             </>
+          ) : (
+            <>
+              <Activity size={14} className="text-cyan-400" />
+              <BarChart3 size={14} className="text-purple-400" />
+              <span>Split</span>
+            </>
           )}
         </h3>
-        <button
-          onClick={() => setMode(mode === 'oscilloscope' ? 'fft' : 'oscilloscope')}
-          className="px-2 py-0.5 bg-gray-700/70 hover:bg-gray-600 rounded text-xs text-white transition-colors"
-        >
-          Switch
-        </button>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setMode('oscilloscope')}
+            className={`px-2 py-0.5 rounded text-xs transition-colors ${
+              mode === 'oscilloscope'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-gray-700/70 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Scope
+          </button>
+          <button
+            onClick={() => setMode('fft')}
+            className={`px-2 py-0.5 rounded text-xs transition-colors ${
+              mode === 'fft'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-700/70 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            FFT
+          </button>
+          <button
+            onClick={() => setMode('split')}
+            className={`px-2 py-0.5 rounded text-xs transition-colors ${
+              mode === 'split'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700/70 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Both
+          </button>
+        </div>
       </div>
       <canvas
         ref={canvasRef}
