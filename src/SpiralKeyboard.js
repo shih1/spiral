@@ -74,40 +74,32 @@ const renderKey = (ctx, note, config, isActive, isPitchClassHeld, pulsePhase) =>
   const w = keyWidth;
   const h = keyHeight;
 
-  // GLOW / SHADOW LOGIC
   if (!isActive) {
     ctx.shadowBlur = 15;
     ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 4;
   } else {
-    // Intense rainbow glow for active keys
     ctx.shadowBlur = 40 + pulseIntensity * 40;
     ctx.shadowColor = `hsla(${hueShift}, 100%, 60%, ${0.8 + pulseIntensity * 0.2})`;
-
-    // Outer border "aurora" effect
     ctx.strokeStyle = `hsla(${hueShift}, 100%, 70%, ${pulseIntensity * 0.7})`;
     ctx.lineWidth = 6 + pulseIntensity * 4;
     ctx.strokeRect(-w / 2 - 4, -h / 2 - 4, w + 8, h + 8);
   }
 
   ctx.fillStyle = getKeyColor(note, config, isActive, isPitchClassHeld, hueShift, pulseIntensity);
-
   ctx.strokeStyle = isActive
     ? `hsla(${hueShift}, 100%, 90%, 1)`
     : isPitchClassHeld
     ? '#1a1a2e'
     : '#333333';
-
   ctx.lineWidth = isActive ? 4 + pulseIntensity * 2 : isPitchClassHeld ? 2.5 : 2;
   ctx.fillRect(-w / 2, -h / 2, w, h);
   ctx.strokeRect(-w / 2, -h / 2, w, h);
 
-  // Remove shadow for internal details
   ctx.shadowBlur = 0;
 
   if (isActive) {
-    // Rainbow Shimmer Overlay
     const shimmerGradient = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
     shimmerGradient.addColorStop(0, `hsla(${hueShift}, 100%, 80%, ${pulseIntensity * 0.5})`);
     shimmerGradient.addColorStop(
@@ -127,7 +119,6 @@ const renderKey = (ctx, note, config, isActive, isPitchClassHeld, pulsePhase) =>
     ctx.fillRect(-w / 2, -h / 2, w, h);
   }
 
-  // Final lighting gradient
   const gradient = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
   if (isActive) {
     gradient.addColorStop(0, `rgba(255, 255, 255, ${0.8 * pulseIntensity})`);
@@ -161,7 +152,10 @@ const SpiralKeyboard = ({
   const staticLayerRef = useRef(null);
   const animationFrameRef = useRef(null);
   const [pulsePhase, setPulsePhase] = useState(0);
-  const [lastMouseNote, setLastMouseNote] = useState(null);
+
+  // Use a Ref for the mouse tracking to ensure the Move handler
+  // always has the most current value without needing a re-render
+  const lastMouseNoteRef = useRef(null);
 
   const width = 700;
   const height = 700;
@@ -201,17 +195,37 @@ const SpiralKeyboard = ({
   const handleMouseDown = (e) => {
     const note = getNoteAtPos(e.clientX, e.clientY);
     if (note) {
-      setLastMouseNote(note);
+      lastMouseNoteRef.current = note;
       onNoteClick(note);
     }
   };
 
-  const handleMouseUp = useCallback(() => {
-    if (lastMouseNote) {
-      onNoteOff?.(lastMouseNote);
-      setLastMouseNote(null);
+  const handleMouseMove = (e) => {
+    // Check if the primary mouse button is pressed (1)
+    if (e.buttons !== 1) return;
+
+    const currentNote = getNoteAtPos(e.clientX, e.clientY);
+
+    // Only do something if the note under the mouse has changed
+    if (currentNote !== lastMouseNoteRef.current) {
+      // Turn off the previous note if it exists
+      if (lastMouseNoteRef.current) {
+        onNoteOff?.(lastMouseNoteRef.current);
+      }
+      // Turn on the new note if it exists
+      if (currentNote) {
+        onNoteClick(currentNote);
+      }
+      lastMouseNoteRef.current = currentNote;
     }
-  }, [lastMouseNote, onNoteOff]);
+  };
+
+  const handleMouseUp = useCallback(() => {
+    if (lastMouseNoteRef.current) {
+      onNoteOff?.(lastMouseNoteRef.current);
+      lastMouseNoteRef.current = null;
+    }
+  }, [onNoteOff]);
 
   useEffect(() => {
     if (!staticLayerRef.current) {
@@ -263,7 +277,6 @@ const SpiralKeyboard = ({
       const ctx = canvas.getContext('2d');
       ctx.drawImage(staticLayerRef.current, 0, 0);
 
-      // --- PASS 1: DRAW INACTIVE KEYS ---
       calculatedNotes.forEach((note) => {
         const isExactNoteHeld = heldNotes.some(
           (h) => h.pitch === note.step && h.octave === note.octave
@@ -275,7 +288,6 @@ const SpiralKeyboard = ({
         }
       });
 
-      // --- PASS 2: DRAW ACTIVE KEYS (ON TOP) ---
       calculatedNotes.forEach((note) => {
         const isExactNoteHeld = heldNotes.some(
           (h) => h.pitch === note.step && h.octave === note.octave
@@ -298,6 +310,7 @@ const SpiralKeyboard = ({
       width={width}
       height={height}
       onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onTouchStart={(e) => {
