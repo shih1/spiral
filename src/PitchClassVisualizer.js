@@ -57,16 +57,24 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
   const height = 700;
   const centerX = width / 2;
   const centerY = height / 2;
-  const radius = Math.min(width, height) / 2 - 50;
+  const radius = Math.min(width, height) / 2 - 65;
 
-  // ROTATED PROJECTION (90deg Clockwise)
+  const THEME = {
+    bgInner: '#0a0c14',
+    bgOuter: '#020205',
+    wireframe: 'rgba(255, 255, 255, 0.05)',
+    labels: 'rgba(200, 210, 230, 0.6)', // Brightened labels
+    activeNode: '45, 212, 191',
+    detectedChordBorder: 'rgba(45, 212, 191, 0.8)',
+    genericHullBorder: 'rgba(255, 255, 255, 0.6)',
+  };
+
   const project = (coords) => ({
     x: centerX - coords.y * radius,
     y: centerY + coords.x * radius,
-    size: 6 + coords.z * 2.5,
+    size: 5 + coords.z * 2,
   });
 
-  // CHORD DETECTION
   const immediateChord = useMemo(() => {
     if (heldNotes.length < 2) return null;
     const uniquePC = Array.from(new Set(heldNotes.map((n) => n.pitch % 12))).sort((a, b) => a - b);
@@ -113,95 +121,96 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     return lower.concat(upper);
   };
 
-  // Pre-render Wireframe
+  // Pre-render Static Wireframe and Labels
   useLayoutEffect(() => {
     if (!staticLayerRef.current) staticLayerRef.current = document.createElement('canvas');
     const sCanvas = staticLayerRef.current;
     sCanvas.width = width;
     sCanvas.height = height;
     const sCtx = sCanvas.getContext('2d');
+
     const bgGradient = sCtx.createRadialGradient(
       centerX,
       centerY,
       0,
       centerX,
       centerY,
-      radius + 50
+      radius + 120
     );
-    bgGradient.addColorStop(0, '#121225');
-    bgGradient.addColorStop(1, '#050505');
+    bgGradient.addColorStop(0, THEME.bgInner);
+    bgGradient.addColorStop(1, THEME.bgOuter);
     sCtx.fillStyle = bgGradient;
     sCtx.fillRect(0, 0, width, height);
 
     for (let i = 0; i < divisions; i++) {
       const coords = getCoordinates(i);
       const pos = project(coords);
-      sCtx.strokeStyle = 'rgba(100, 100, 150, 0.15)';
+
+      // Wireframe Lines
+      sCtx.strokeStyle = THEME.wireframe;
       sCtx.lineWidth = 1;
       sCtx.beginPath();
       sCtx.moveTo(centerX, centerY);
       sCtx.lineTo(pos.x, pos.y);
       sCtx.stroke();
 
-      const labelX = centerX - Math.sin(coords.theta) * (radius + 25);
-      const labelY = centerY + Math.cos(coords.theta) * (radius + 25);
-      sCtx.fillStyle = 'rgba(150, 150, 150, 0.5)';
-      sCtx.font = '10px "JetBrains Mono", monospace';
+      // More Visible Labels
+      const labelX = centerX - Math.sin(coords.theta) * (radius + 45);
+      const labelY = centerY + Math.cos(coords.theta) * (radius + 45);
+      sCtx.fillStyle = THEME.labels;
+      sCtx.font = '500 13px "JetBrains Mono", monospace';
       sCtx.textAlign = 'center';
       sCtx.fillText(i.toString(), labelX, labelY);
     }
   }, [divisions, getCoordinates]);
 
-  // Synchronous Render Loop
   useLayoutEffect(() => {
     const ctx = canvasRef.current.getContext('2d', { alpha: false });
 
     const render = () => {
       ctx.drawImage(staticLayerRef.current, 0, 0);
 
-      if (heldNotes.length >= 3) {
-        const points = heldNotes.map((n) =>
-          project(getCoordinates(n.pitch + n.octave * divisions))
-        );
-        const hull = getConvexHull(points);
+      const currentPoints = heldNotes.map((n) =>
+        project(getCoordinates(n.pitch + n.octave * divisions))
+      );
+
+      if (currentPoints.length >= 3) {
+        const hull = getConvexHull(currentPoints);
         ctx.beginPath();
+        ctx.lineJoin = 'round';
         hull.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
         ctx.closePath();
 
-        const color = immediateChord ? '255, 200, 50' : '0, 255, 255';
-        ctx.fillStyle = `rgba(${color}, 0.15)`;
+        const isChord = !!immediateChord;
+        ctx.fillStyle = isChord ? `rgba(${THEME.activeNode}, 0.1)` : `rgba(255, 255, 255, 0.05)`;
         ctx.fill();
-        ctx.strokeStyle = `rgba(${color}, ${immediateChord ? 0.8 : 0.5})`;
-        ctx.lineWidth = immediateChord ? 3 : 1.5;
-        if (!immediateChord) ctx.setLineDash([4, 4]);
-        ctx.stroke();
-        ctx.setLineDash([]);
 
-        if (immediateChord) {
-          ctx.fillStyle = 'white';
-          ctx.font = 'bold 24px "JetBrains Mono", monospace';
+        ctx.strokeStyle = isChord ? THEME.detectedChordBorder : THEME.genericHullBorder;
+        ctx.lineWidth = isChord ? 2 : 1.5;
+        ctx.stroke();
+
+        if (isChord) {
+          ctx.fillStyle = `rgb(${THEME.activeNode})`;
+          ctx.font = '300 24px "JetBrains Mono", monospace';
           ctx.textAlign = 'center';
-          ctx.fillText(immediateChord.toUpperCase(), centerX, height - 50);
+          ctx.letterSpacing = '6px';
+          ctx.fillText(immediateChord.toUpperCase(), centerX, height - 60);
         }
       }
 
-      heldNotes.forEach((n) => {
-        const pos = project(getCoordinates(n.pitch + n.octave * divisions));
+      currentPoints.forEach((pos) => {
+        const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, pos.size * 5);
+        glow.addColorStop(0, `rgba(${THEME.activeNode}, 0.5)`);
+        glow.addColorStop(1, `rgba(${THEME.activeNode}, 0)`);
 
-        ctx.strokeStyle = `rgba(0, 255, 136, 0.15)`;
+        ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.lineTo(pos.x, pos.y);
-        ctx.stroke();
-
-        ctx.fillStyle = `rgba(0, 255, 136, 0.2)`;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, pos.size * 2, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, pos.size * 5, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(255, 255, 255, 1.0)`;
+        ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, pos.size / 2, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, pos.size / 2.5, 0, Math.PI * 2);
         ctx.fill();
       });
 
@@ -217,7 +226,7 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
       ref={canvasRef}
       width={width}
       height={height}
-      className="rounded-xl border border-gray-800"
+      className="rounded-3xl border border-white/10 shadow-2xl"
     />
   );
 };
