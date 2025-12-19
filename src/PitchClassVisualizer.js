@@ -59,27 +59,25 @@ const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
   const centerY = height / 2;
   const radius = Math.min(width, height) / 2 - 50;
 
+  // ROTATED PROJECTION (90deg Clockwise)
   const project = (coords) => ({
-    x: centerX + coords.x * radius,
-    y: centerY + coords.y * radius,
+    x: centerX - coords.y * radius,
+    y: centerY + coords.x * radius,
     size: 6 + coords.z * 2.5,
   });
 
-  // IMMEDIATE DETECTION (Calculated on state change, not frame tick)
+  // IMMEDIATE DETECTION
   const immediateChord = useMemo(() => {
     if (heldNotes.length < 2) return null;
 
-    // Normalize to Pitch Classes (0-11)
     const uniquePC = Array.from(new Set(heldNotes.map((n) => n.pitch % 12))).sort((a, b) => a - b);
 
     for (let i = 0; i < uniquePC.length; i++) {
       const root = uniquePC[i];
-      // Check every possible inversion as a potential root
       const intervals = uniquePC.map((p) => (p - root + 12) % 12).sort((a, b) => a - b);
       const signature = intervals.join(',');
 
       for (const [name, pattern] of Object.entries(CHORD_LIBRARY)) {
-        // Normalize pattern to pitch class for comparison
         const patternSig = pattern
           .map((p) => p % 12)
           .sort((a, b) => a - b)
@@ -149,8 +147,10 @@ const PitchClassVisualizer = ({ config, heldNotes, releasedNotes }) => {
       sCtx.lineTo(pos.x, pos.y);
       sCtx.stroke();
 
-      const labelX = centerX + Math.cos(coords.theta) * (radius + 25);
-      const labelY = centerY + Math.sin(coords.theta) * (radius + 25);
+      // Rotated Label Position Logic
+      const labelX = centerX - Math.sin(coords.theta) * (radius + 25);
+      const labelY = centerY + Math.cos(coords.theta) * (radius + 25);
+
       sCtx.fillStyle = 'rgba(150, 150, 150, 0.5)';
       sCtx.font = '10px "JetBrains Mono", monospace';
       sCtx.textAlign = 'center';
