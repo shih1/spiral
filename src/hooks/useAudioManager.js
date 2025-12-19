@@ -1,8 +1,3 @@
-// ============================================
-// FILE: src/hooks/useAudioManager.js
-// FIXED VERSION - Continuous RAF loop + Mixer Support
-// ============================================
-
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 export const useAudioManager = (config, mixer, reverb) => {
@@ -17,6 +12,7 @@ export const useAudioManager = (config, mixer, reverb) => {
   const reverbNodeRef = useRef(null);
   const reverbGainRef = useRef(null);
   const dryGainRef = useRef(null);
+  const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
 
   // Initialize Audio Context with Master Gain and Reverb
@@ -26,8 +22,15 @@ export const useAudioManager = (config, mixer, reverb) => {
 
     // Create master gain node
     masterGainRef.current = ctx.createGain();
-    masterGainRef.current.connect(ctx.destination);
     masterGainRef.current.gain.value = mixer.masterVolume;
+
+    // Create analyser node
+    analyserRef.current = ctx.createAnalyser();
+    analyserRef.current.fftSize = 2048;
+
+    // Connect masterGain -> analyser -> destination
+    masterGainRef.current.connect(analyserRef.current);
+    analyserRef.current.connect(ctx.destination);
 
     // Create reverb convolver node
     reverbNodeRef.current = ctx.createConvolver();
@@ -36,10 +39,10 @@ export const useAudioManager = (config, mixer, reverb) => {
     dryGainRef.current = ctx.createGain();
     reverbGainRef.current = ctx.createGain();
 
-    // Connect dry path: dryGain -> master -> destination
+    // Connect dry path: dryGain -> master -> analyser -> destination
     dryGainRef.current.connect(masterGainRef.current);
 
-    // Connect wet path: reverbGain -> reverb -> master -> destination
+    // Connect wet path: reverbGain -> reverb -> master -> analyser -> destination
     reverbGainRef.current.connect(reverbNodeRef.current);
     reverbNodeRef.current.connect(masterGainRef.current);
 
@@ -288,5 +291,6 @@ export const useAudioManager = (config, mixer, reverb) => {
     handleNotePlay,
     stopNote,
     releaseNote,
+    analyser: analyserRef.current,
   };
 };

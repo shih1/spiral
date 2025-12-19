@@ -10,12 +10,14 @@ import { useAudioManager } from './hooks/useAudioManager';
 import { useKeyboardControls } from './hooks/useKeyboardControls';
 import PerformanceMonitor from './PerformanceMonitor';
 import KeyboardVisualizer from './KeyboardVisualizer';
+import AudioVisualizer from './AudioVisualizer';
 
 function App() {
   // UI State
   const [keyboardEnabled, setKeyboardEnabled] = useState(true);
   const [visualizationMode, setVisualizationMode] = useState('2D'); // '2D' or '3D'
   const [showSettings, setShowSettings] = useState(false);
+  const [showAudioScope, setShowAudioScope] = useState(true);
 
   // Musical State
   const [pressedKeys, setPressedKeys] = useState(new Set());
@@ -49,6 +51,7 @@ function App() {
     handleNotePlay,
     stopNote,
     releaseNote,
+    analyser,
   } = useAudioManager(config, mixer, reverb);
 
   useKeyboardControls({
@@ -99,6 +102,14 @@ function App() {
             </span>
           </button>
 
+          {/* Audio Scope Toggle */}
+          <button
+            onClick={() => setShowAudioScope(!showAudioScope)}
+            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-white border border-gray-600 transition-all text-sm"
+          >
+            {showAudioScope ? 'Hide' : 'Show'} Audio Scope
+          </button>
+
           <label className="flex items-center text-white text-sm cursor-pointer hover:text-blue-300 transition-colors">
             <input
               type="checkbox"
@@ -135,7 +146,7 @@ function App() {
         />
 
         {/* Right Side: The Swappable Visualizer */}
-        <div className="relative">
+        <div className="flex flex-col gap-4">
           {visualizationMode === '2D' ? (
             <PitchClassVisualizer
               config={config}
@@ -150,6 +161,9 @@ function App() {
               releasedNotes={releasedNotes}
             />
           )}
+
+          {/* Audio Scope */}
+          {showAudioScope && analyser && <AudioVisualizer analyserNode={analyser} />}
         </div>
       </div>
 
