@@ -82,31 +82,39 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         const sinP = Math.sin(pitchRef.current);
         const yNew = y * sinP - z * cosP;
         const zNew = y * cosP + z * sinP;
-        const factor = perspective / (perspective + zNew + 400);
-        return {
-          px: centerX + x * factor,
-          py: centerY + yNew * factor,
-          scale: factor,
-          zDepth: zNew,
-          isFront: zNew < 0,
-        };
+
+        const zFinal = zNew + 400;
+        if (zFinal <= 0) return null; // Avoid division by zero
+
+        const factor = perspective / (perspective + zFinal);
+        const px = centerX + x * factor;
+        const py = centerY + yNew * factor;
+
+        // Final safety check for Canvas API
+        if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+
+        return { px, py, scale: factor, zDepth: zNew, isFront: zNew < 0 };
       };
 
       // 1. DATA PREP
       const now = Date.now();
       const allActive = [...heldNotes, ...releasedNotes.filter((n) => now - n.time < releaseTime)];
-      const currentPoints = allActive.map((note) => {
-        const abs = note.pitch + note.octave * divisions;
-        return { ...project3D(getCoordinates(abs)), color: getNoteColor(abs) };
-      });
+      const currentPoints = allActive
+        .map((note) => {
+          const abs = note.pitch + note.octave * divisions;
+          const proj = project3D(getCoordinates(abs));
+          return proj ? { ...proj, color: getNoteColor(abs) } : null;
+        })
+        .filter((p) => p !== null);
 
-      // 2. WHITE STRUCTURAL RIBS
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      // 2. WHITE RIBS
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
       ctx.lineWidth = 1;
       for (let d = 0; d < divisions; d++) {
         ctx.beginPath();
         for (let o = 0; o <= octaves; o++) {
           const p = project3D(getCoordinates(d + o * divisions));
+          if (!p) continue;
           if (o === 0) ctx.moveTo(p.px, p.py);
           else ctx.lineTo(p.px, p.py);
         }
@@ -131,46 +139,62 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
       // 3. BACK HELIX
       drawHelixPass(false);
 
-      // 4. THE CRYSTAL (3D Mesh)
+      // 4. TEXTURED CRYSTAL (With Non-Finite Safety)
       if (currentPoints.length >= 3) {
-        // Draw Faces
         for (let i = 0; i < currentPoints.length; i++) {
           for (let j = i + 1; j < currentPoints.length; j++) {
             for (let k = j + 1; k < currentPoints.length; k++) {
+              const p1 = currentPoints[i];
+              const p2 = currentPoints[j];
+              const p3 = currentPoints[k];
+
+              // Ensure points aren't identical to avoid zero-width gradients
+              if (Math.abs(p1.px - p3.px) < 0.1 && Math.abs(p1.py - p3.py) < 0.1) continue;
+
               ctx.beginPath();
-              ctx.moveTo(currentPoints[i].px, currentPoints[i].py);
-              ctx.lineTo(currentPoints[j].px, currentPoints[j].py);
-              ctx.lineTo(currentPoints[k].px, currentPoints[k].py);
+              ctx.moveTo(p1.px, p1.py);
+              ctx.lineTo(p2.px, p2.py);
+              ctx.lineTo(p3.px, p3.py);
               ctx.closePath();
 
-              const avgZ =
-                (currentPoints[i].zDepth + currentPoints[j].zDepth + currentPoints[k].zDepth) / 3;
-              const opacity = avgZ < 0 ? 0.08 : 0.02;
-              ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-              ctx.fill();
+              try {
+                const grad = ctx.createLinearGradient(p1.px, p1.py, p3.px, p3.py);
+                const avgZ = (p1.zDepth + p2.zDepth + p3.zDepth) / 3;
+
+                // Texture colors
+                const opacity = avgZ < 0 ? 0.18 : 0.06;
+                const highlight = Math.sin(rotationRef.current + i) * 0.5 + 0.5; // Shimmer effect
+
+                grad.addColorStop(0, `rgba(200, 230, 255, ${opacity})`);
+                grad.addColorStop(0.5 + highlight * 0.2, `rgba(255, 255, 255, ${opacity * 2})`);
+                grad.addColorStop(1, `rgba(100, 150, 255, ${opacity * 0.5})`);
+
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
+              } catch (e) {
+                // Fallback if gradient still fails
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.fill();
+              }
             }
-          }
-        }
-        // Draw Wireframe Connections
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.lineWidth = 0.5;
-        for (let i = 0; i < currentPoints.length; i++) {
-          for (let j = i + 1; j < currentPoints.length; j++) {
-            ctx.beginPath();
-            ctx.moveTo(currentPoints[i].px, currentPoints[i].py);
-            ctx.lineTo(currentPoints[j].px, currentPoints[j].py);
-            ctx.stroke();
           }
         }
       }
 
       // 5. ACTIVE NOTES
       currentPoints.forEach((p) => {
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 20;
         ctx.shadowColor = p.color;
         ctx.fillStyle = p.color;
         ctx.beginPath();
-        ctx.arc(p.px, p.py, 8 * p.scale, 0, Math.PI * 2);
+        ctx.arc(p.px, p.py, 6 * p.scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.beginPath();
+        ctx.arc(p.px, p.py, 2 * p.scale, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
       });
