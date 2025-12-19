@@ -5,6 +5,9 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const [mode, setMode] = useState('fft');
+  const lastFrameTimeRef = useRef(0);
+  const TARGET_FPS = 60; // Cap visualizer at 60fps
+  const frameInterval = 1000 / TARGET_FPS;
 
   // Ref to store peak values for the ghost line
   const peaksRef = useRef(new Float32Array(0));
@@ -39,8 +42,14 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
       return 0;
     };
 
-    const draw = () => {
+    const draw = (currentTime) => {
       animationRef.current = requestAnimationFrame(draw);
+
+      // Frame limiting: only draw if enough time has passed
+      const elapsed = currentTime - lastFrameTimeRef.current;
+      if (elapsed < frameInterval) return;
+      lastFrameTimeRef.current = currentTime - (elapsed % frameInterval);
+
       ctx.fillStyle = 'rgb(10, 10, 18)';
       ctx.fillRect(0, 0, width, height);
 
@@ -60,12 +69,25 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
           ctx.stroke();
         }
 
+        // Time labels
+        ctx.font = '10px monospace';
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.4)';
+        const samplesShown = 1024;
+        const timeShown = (samplesShown / sampleRate) * 1000; // in ms
+        const timeMarkers = [0, 0.25, 0.5, 0.75, 1.0];
+        timeMarkers.forEach((t) => {
+          const x = t * width;
+          const timeMs = t * timeShown;
+          const label = timeMs >= 1 ? `${timeMs.toFixed(1)}ms` : `${(timeMs * 1000).toFixed(0)}µs`;
+          ctx.fillText(label, x + 2, height - 10);
+        });
+
         const trigger = findStableTrigger(timeDataArray);
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#00fbff';
         ctx.beginPath();
-        for (let i = 0; i < 1024; i++) {
-          const x = (i / 1024) * width;
+        for (let i = 0; i < samplesShown; i++) {
+          const x = (i / samplesShown) * width;
           const y = (timeDataArray[trigger + i] / 255) * height;
           i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         }
@@ -76,12 +98,17 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
         const activeWidth = isSplit ? width / 2 : width;
         const xOffset = isSplit ? width / 2 : 0;
 
+        // Define frequency range (50Hz to 10kHz)
+        const minFreq = 50;
+        const maxFreq = 10000;
+        const logMin = Math.log10(minFreq);
+        const logMax = Math.log10(maxFreq);
+
         // 1. Draw Logarithmic Grid & Labels
         ctx.font = '10px monospace';
-        const freqMarkers = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+        const freqMarkers = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
         freqMarkers.forEach((f) => {
-          if (f > nyquist) return;
-          const logPos = Math.log10(f) / Math.log10(nyquist);
+          const logPos = (Math.log10(f) - logMin) / (logMax - logMin);
           const x = xOffset + logPos * activeWidth;
 
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
@@ -98,7 +125,7 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
         // 2. Calculate Path and Update Peaks
         const points = [];
         for (let x = 0; x < activeWidth; x++) {
-          const logFreq = (x / activeWidth) * Math.log10(nyquist);
+          const logFreq = logMin + (x / activeWidth) * (logMax - logMin);
           const freq = Math.pow(10, logFreq);
           const binIndex = (freq / nyquist) * bufferLength;
           const i = Math.floor(binIndex);
@@ -174,7 +201,7 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
       }
     };
 
-    draw();
+    draw(0);
     return () => cancelAnimationFrame(animationRef.current);
   }, [analyserNode, audioContext, mode]);
 

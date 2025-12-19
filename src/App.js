@@ -86,13 +86,6 @@ function App() {
           <h1 className="text-xl font-bold text-white tracking-wide">Microtonal Spiral</h1>
         </div>
 
-        {/* Audio Visualizer in Header */}
-        <div className="flex-1 max-w-2xl mx-8">
-          {analyser && audioContext && (
-            <AudioVisualizer analyserNode={analyser} audioContext={audioContext} />
-          )}
-        </div>
-
         <div className="flex items-center gap-4">
           {/* Visualization Toggle */}
           <button
@@ -163,7 +156,16 @@ function App() {
         </div>
       </div>
 
-      {/* 5. Physical Keyboard Reference */}
+      {/* 5. Audio Visualizer */}
+      <div className="p-4 flex justify-center">
+        <div className="w-full max-w-4xl">
+          {analyser && audioContext && (
+            <AudioVisualizer analyserNode={analyser} audioContext={audioContext} />
+          )}
+        </div>
+      </div>
+
+      {/* 6. Physical Keyboard Reference */}
       <div className="p-4 flex justify-center">
         <KeyboardVisualizer
           activePitchClasses={activePitchClasses}
@@ -172,7 +174,7 @@ function App() {
         />
       </div>
 
-      {/* 6. Footer Instructions */}
+      {/* 7. Footer Instructions */}
       <Instructions />
     </div>
   );
