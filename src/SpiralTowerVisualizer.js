@@ -16,6 +16,12 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
   const width = 700;
   const height = 700;
 
+  const getNoteColor = (absoluteStep, alpha = 1) => {
+    const hue = (absoluteStep / (divisions * octaves)) * 360;
+    // Lightness is now locked at 60% for both front and back
+    return `hsla(${hue}, 80%, 60%, ${alpha})`;
+  };
+
   useEffect(() => {
     const handleMouseDown = (e) => {
       isDragging.current = true;
@@ -47,7 +53,7 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
     const ctx = canvas.getContext('2d');
 
     const render = () => {
-      ctx.fillStyle = '#020205'; // Darker background for more contrast
+      ctx.fillStyle = '#020205';
       ctx.fillRect(0, 0, width, height);
 
       rotationRef.current += velocity.current.x;
@@ -90,14 +96,11 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         };
       };
 
-      // 1. INTENSE VERTICAL RIBS
-      // We only draw the primary 12 semitone paths to keep it clean but bright
-      ctx.lineCap = 'round';
+      // 1. VERTICAL RIBS (White)
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 1;
       for (let d = 0; d < divisions; d++) {
         ctx.beginPath();
-        // High intensity cyan with a glow effect
-        ctx.strokeStyle = `rgba(0, 200, 255, 0.15)`;
-        ctx.lineWidth = 1.5;
         for (let o = 0; o <= octaves; o++) {
           const p = project3D(getCoordinates(d + o * divisions));
           if (o === 0) ctx.moveTo(p.px, p.py);
@@ -106,47 +109,33 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         ctx.stroke();
       }
 
-      // 2. SMOOTH HELIX (Sub-sampling for spring-like look)
-      const segmentsPerNote = 6; // Higher number = smoother curve
+      // 2. HELIX RENDERING
+      const segmentsPerNote = 8; // Increased resolution for smoother transitions
       const totalSteps = divisions * octaves * segmentsPerNote;
 
       const drawHelixPass = (drawFront) => {
-        ctx.beginPath();
-        let firstPoint = true;
+        for (let i = 0; i < totalSteps; i++) {
+          const step1 = i / segmentsPerNote;
+          const step2 = (i + 1) / segmentsPerNote;
 
-        for (let i = 0; i <= totalSteps; i++) {
-          const step = i / segmentsPerNote;
-          const coords = getCoordinates(step);
-          const p = project3D(coords);
+          const p1 = project3D(getCoordinates(step1));
+          const p2 = project3D(getCoordinates(step2));
 
-          if (!p) continue;
+          // Draw only if the segment matches the current pass (Front or Back)
+          if (!p1 || !p2 || p1.isFront !== drawFront) continue;
 
-          // Only draw if it matches the current pass (Front or Back)
-          if (p.isFront === drawFront) {
-            if (firstPoint) {
-              ctx.moveTo(p.px, p.py);
-              firstPoint = false;
-            } else {
-              ctx.lineTo(p.px, p.py);
-            }
-          } else {
-            // If we cross the front/back threshold, break the path to maintain layering
-            ctx.stroke();
-            ctx.beginPath();
-            firstPoint = true;
-          }
+          ctx.beginPath();
+          ctx.moveTo(p1.px, p1.py);
+          ctx.lineTo(p2.px, p2.py);
 
-          // Apply styling per segment block
-          if (i % 20 === 0 || i === totalSteps) {
-            const scaleFactor = p.scale;
-            ctx.lineWidth = drawFront ? 3.5 * scaleFactor : 1.2 * scaleFactor;
-            ctx.strokeStyle = drawFront ? `rgba(0, 255, 255, 0.5)` : `rgba(0, 150, 200, 0.15)`;
-          }
+          // No more opacity difference between passes
+          ctx.strokeStyle = getNoteColor(step1, 0.8);
+          ctx.lineWidth = (drawFront ? 3 : 2) * p1.scale;
+          ctx.stroke();
         }
-        ctx.stroke();
       };
 
-      // Render Pass 1: Back of Helix
+      // Back Pass
       drawHelixPass(false);
 
       // 3. ACTIVE NOTES
@@ -159,15 +148,16 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         let fade = note.time ? Math.max(0, 1 - (now - note.time) / releaseTime) : 1.0;
         const size = (note.time ? 7 : 12) * p.scale;
 
+        const noteColor = getNoteColor(absoluteStep, fade);
         ctx.shadowBlur = 20 * fade;
-        ctx.shadowColor = '#00ffcc';
-        ctx.fillStyle = `rgba(0, 255, 220, ${fade})`;
+        ctx.shadowColor = noteColor;
+        ctx.fillStyle = noteColor;
+
         ctx.beginPath();
         ctx.arc(p.px, p.py, size, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Label Glow
         if (fade > 0.3) {
           ctx.font = `bold ${11 * p.scale}px monospace`;
           ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
@@ -176,7 +166,7 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         }
       });
 
-      // Render Pass 2: Front of Helix (Draws over notes for true 3D depth)
+      // Front Pass
       drawHelixPass(true);
 
       animationFrameRef.current = requestAnimationFrame(render);
@@ -194,10 +184,6 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         height={height}
         className="rounded-xl border border-white/5 shadow-2xl"
       />
-      <div className="absolute top-6 left-6 pointer-events-none">
-        <div className="text-cyan-500 font-mono text-xs tracking-[0.2em] font-bold">HELIX CORE</div>
-        <div className="h-[1px] w-12 bg-cyan-500/50 mt-1"></div>
-      </div>
     </div>
   );
 };
