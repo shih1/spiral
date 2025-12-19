@@ -24,7 +24,7 @@ function App() {
   const [config, setConfig] = useState({
     divisions: 12,
     octaves: 4,
-    baseFreq: 440,
+    baseFreq: 110,
     spiralTightness: 0.2,
     showLabels: false,
     colorMode: 'piano',
