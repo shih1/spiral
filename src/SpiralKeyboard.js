@@ -231,7 +231,7 @@ const SpiralKeyboard = ({
     const { divisions, octaves, baseFreq, spiralTightness, keyHeight } = config;
     if (calculatedNotes.length > 0) {
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
       ctx.lineWidth = 2.5;
       const totalSteps = divisions * octaves;
       for (let i = 0; i <= totalSteps * 12; i++) {

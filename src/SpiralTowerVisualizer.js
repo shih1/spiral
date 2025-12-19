@@ -210,14 +210,13 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
   }, [heldNotes, releasedNotes, getCoordinates, divisions, octaves, releaseTime]);
 
   return (
-    <div className="relative flex justify-center items-center bg-[#020205] p-6">
-      <canvas
-        ref={canvasRef}
-        width={width}
-        height={height}
-        className="rounded-xl border border-white/5 shadow-2xl"
-      />
-    </div>
+    <canvas
+      ref={canvasRef}
+      width={width}
+      height={height}
+      /* Match the class names from PitchClassVisualizer */
+      className="rounded-3xl border border-white/10 shadow-2xl"
+    />
   );
 };
 
