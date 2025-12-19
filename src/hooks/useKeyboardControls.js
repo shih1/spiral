@@ -1,7 +1,3 @@
-// ============================================
-// FILE: src/hooks/useKeyboardControls.js
-// ============================================
-
 import { useEffect } from 'react';
 
 export const useKeyboardControls = ({
@@ -14,15 +10,11 @@ export const useKeyboardControls = ({
   releaseNote,
   setActiveNote,
   config,
+  setPressedKeys,
 }) => {
   const { divisions } = config;
 
-  // Two octaves across 4 rows:
-  // Rows 0+1 (ZXCV + ASDF): Lower octave (steps 0 to divisions-1)
-  // Rows 2+3 (QWERTY + 1234): Upper octave (steps divisions to 2*divisions-1)
-
   const keyboardLayout = {
-    // Row 0 - Lower octave part 1 (steps 0-9)
     z: 0,
     x: 1,
     c: 2,
@@ -33,8 +25,6 @@ export const useKeyboardControls = ({
     ',': 7,
     '.': 8,
     '/': 9,
-
-    // Row 1 - Lower octave part 2 (steps 10+)
     a: 10,
     s: 11,
     d: 12,
@@ -46,8 +36,6 @@ export const useKeyboardControls = ({
     l: 18,
     ';': 19,
     "'": 20,
-
-    // Row 2 - Upper octave part 1 (steps 0-12 of next octave)
     q: divisions + 0,
     w: divisions + 1,
     e: divisions + 2,
@@ -61,8 +49,6 @@ export const useKeyboardControls = ({
     '[': divisions + 10,
     ']': divisions + 11,
     '\\': divisions + 12,
-
-    // Row 3 - Upper octave part 2 (steps 0-11 of next octave)
     1: divisions + 10,
     2: divisions + 11,
     3: divisions + 12,
@@ -82,42 +68,54 @@ export const useKeyboardControls = ({
 
     const handleKeyDown = (e) => {
       if (e.repeat) return;
-      const key = e.key.toLowerCase();
-      const noteIndex = keyboardLayout[key];
+      const keyChar = e.key.toLowerCase();
+      const noteIndex = keyboardLayout[keyChar];
 
-      if (noteIndex === undefined) return;
-      if (noteIndex >= notes.length) return;
+      if (noteIndex === undefined || noteIndex >= notes.length) return;
 
       e.preventDefault();
-
       const note = notes[noteIndex];
       const nodes = handleNotePlay(note, true);
 
       if (nodes) {
-        setActiveOscillators((prev) => ({ ...prev, [key]: nodes }));
+        // Map oscillators by the physical code (e.g., 'KeyZ') for 1:1 tracking
+        setActiveOscillators((prev) => ({ ...prev, [e.code]: nodes }));
+
+        if (setPressedKeys) {
+          setPressedKeys((prev) => {
+            const newSet = new Set(prev);
+            newSet.add(e.code);
+            return newSet;
+          });
+        }
       }
     };
 
     const handleKeyUp = (e) => {
-      const key = e.key.toLowerCase();
+      if (activeOscillators[e.code]) {
+        const { oscillator, gainNode, id } = activeOscillators[e.code];
+        const keyChar = e.key.toLowerCase();
+        const noteIndex = keyboardLayout[keyChar];
 
-      if (activeOscillators[key]) {
-        const { oscillator, gainNode, id } = activeOscillators[key];
-        const noteIndex = keyboardLayout[key];
-
-        if (noteIndex === undefined) return;
-
-        const note = notes[noteIndex];
-
-        stopNote(oscillator, gainNode);
-        releaseNote(id, note.step);
+        if (noteIndex !== undefined) {
+          const note = notes[noteIndex];
+          stopNote(oscillator, gainNode);
+          releaseNote(id, note.step);
+        }
 
         setActiveOscillators((prev) => {
           const newOsc = { ...prev };
-          delete newOsc[key];
+          delete newOsc[e.code];
           return newOsc;
         });
 
+        if (setPressedKeys) {
+          setPressedKeys((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(e.code);
+            return newSet;
+          });
+        }
         setActiveNote(null);
       }
     };
@@ -129,5 +127,15 @@ export const useKeyboardControls = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [enabled, notes, activeOscillators, divisions]);
+  }, [
+    enabled,
+    notes,
+    activeOscillators,
+    divisions,
+    setPressedKeys,
+    handleNotePlay,
+    stopNote,
+    releaseNote,
+    setActiveNote,
+  ]);
 };

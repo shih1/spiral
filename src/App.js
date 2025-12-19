@@ -12,6 +12,7 @@ import KeyboardVisualizer from './KeyboardVisualizer';
 
 function App() {
   const [keyboardEnabled, setKeyboardEnabled] = useState(true);
+  const [pressedKeys, setPressedKeys] = useState(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [notes, setNotes] = useState([]);
   const [config, setConfig] = useState({
@@ -26,20 +27,11 @@ function App() {
     releaseTime: 1000,
   });
 
-  const [mixer, setMixer] = useState({
-    masterVolume: 0.7,
-    muted: false,
-  });
-
-  const [reverb, setReverb] = useState({
-    enabled: true,
-    wet: 0.3,
-    decay: 2.0,
-  });
+  const [mixer, setMixer] = useState({ masterVolume: 0.7, muted: false });
+  const [reverb, setReverb] = useState({ enabled: true, wet: 0.3, decay: 2.0 });
 
   const presets = { '12-TET': 12, '19-TET': 19, '24-TET': 24, '31-TET': 31, '53-TET': 53 };
 
-  // Audio manager hook - handles all audio and note state
   const {
     activeNote,
     activePitchClasses,
@@ -62,7 +54,8 @@ function App() {
     stopNote,
     releaseNote,
     setActiveNote,
-    config, // Add this!
+    config,
+    setPressedKeys,
   });
 
   return (
@@ -73,7 +66,6 @@ function App() {
         releasedNotes={releasedNotes}
         activeOscillators={activeOscillators}
       />
-      {/* Header */}
       <div className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-blue-500/20 rounded-lg">
@@ -101,13 +93,8 @@ function App() {
           </button>
         </div>
       </div>
-      {/* Settings Panel */}
       {showSettings && <SettingsPanel config={config} setConfig={setConfig} presets={presets} />}
-
-      {/* Mixer Panel (includes Volume + Reverb) */}
       <MixerPanel mixer={mixer} setMixer={setMixer} reverb={reverb} setReverb={setReverb} />
-
-      {/* Main Content Area */}
       <div className="flex-1 flex items-center justify-center p-4 gap-4 overflow-auto">
         <div className="flex items-center gap-4">
           <SpiralKeyboard
@@ -128,11 +115,9 @@ function App() {
       </div>
       <KeyboardVisualizer
         activePitchClasses={activePitchClasses}
-        heldNotes={heldNotes}
-        releasedNotes={releasedNotes}
         config={config}
+        pressedKeys={pressedKeys}
       />
-      {/* Instructions Footer */}
       <Instructions />
     </div>
   );
