@@ -8,18 +8,18 @@ const KeyboardVisualizer = ({ activePitchClasses, config, pressedKeys }) => {
       row: 3,
       keys: [
         { code: 'Backquote', key: '`', noteIndex: null, disabled: true },
-        { code: 'Digit1', key: '1', noteIndex: divisions + 10 },
-        { code: 'Digit2', key: '2', noteIndex: divisions + 11 },
-        { code: 'Digit3', key: '3', noteIndex: divisions + 12 },
-        { code: 'Digit4', key: '4', noteIndex: divisions + 13 },
-        { code: 'Digit5', key: '5', noteIndex: divisions + 14 },
-        { code: 'Digit6', key: '6', noteIndex: divisions + 15 },
-        { code: 'Digit7', key: '7', noteIndex: divisions + 16 },
-        { code: 'Digit8', key: '8', noteIndex: divisions + 17 },
-        { code: 'Digit9', key: '9', noteIndex: divisions + 18 },
-        { code: 'Digit0', key: '0', noteIndex: divisions + 19 },
-        { code: 'Minus', key: '-', noteIndex: divisions + 20 },
-        { code: 'Equal', key: '=', noteIndex: divisions + 21 },
+        { code: 'Digit1', key: '1', noteIndex: divisions + 13 },
+        { code: 'Digit2', key: '2', noteIndex: divisions + 14 },
+        { code: 'Digit3', key: '3', noteIndex: divisions + 15 },
+        { code: 'Digit4', key: '4', noteIndex: divisions + 16 },
+        { code: 'Digit5', key: '5', noteIndex: divisions + 17 },
+        { code: 'Digit6', key: '6', noteIndex: divisions + 18 },
+        { code: 'Digit7', key: '7', noteIndex: divisions + 19 },
+        { code: 'Digit8', key: '8', noteIndex: divisions + 20 },
+        { code: 'Digit9', key: '9', noteIndex: divisions + 21 },
+        { code: 'Digit0', key: '0', noteIndex: divisions + 22 },
+        { code: 'Minus', key: '-', noteIndex: divisions + 23 },
+        { code: 'Equal', key: '=', noteIndex: divisions + 24 },
         { code: 'Backspace', key: '⌫', noteIndex: null, disabled: true, wide: true },
       ],
     },
@@ -127,7 +127,7 @@ const KeyboardVisualizer = ({ activePitchClasses, config, pressedKeys }) => {
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-white mb-1">Keyboard Input</h2>
         <p className="text-sm text-gray-400">
-          {divisions}-TET • 2 Octaves (Cyan = Physical Key, Blue = Pitch Match)
+          {divisions}-TET • 2 Octave Tiers (Bottom: 0-20, Top: Octave+0-24)
         </p>
       </div>
 

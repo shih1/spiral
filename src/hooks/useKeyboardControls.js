@@ -14,7 +14,11 @@ export const useKeyboardControls = ({
 }) => {
   const { divisions } = config;
 
+  // Tier 1: Bottom two rows (continuous 0-20)
+  // Tier 2: Top two rows (continuous starting from divisions)
   const keyboardLayout = {
+    // LOWER TIER
+    // Row 0 (Bottom)
     z: 0,
     x: 1,
     c: 2,
@@ -25,6 +29,7 @@ export const useKeyboardControls = ({
     ',': 7,
     '.': 8,
     '/': 9,
+    // Row 1 (Middle-Lower)
     a: 10,
     s: 11,
     d: 12,
@@ -36,6 +41,9 @@ export const useKeyboardControls = ({
     l: 18,
     ';': 19,
     "'": 20,
+
+    // UPPER TIER
+    // Row 2 (Middle-Upper)
     q: divisions + 0,
     w: divisions + 1,
     e: divisions + 2,
@@ -49,18 +57,19 @@ export const useKeyboardControls = ({
     '[': divisions + 10,
     ']': divisions + 11,
     '\\': divisions + 12,
-    1: divisions + 10,
-    2: divisions + 11,
-    3: divisions + 12,
-    4: divisions + 13,
-    5: divisions + 14,
-    6: divisions + 15,
-    7: divisions + 16,
-    8: divisions + 17,
-    9: divisions + 18,
-    0: divisions + 19,
-    '-': divisions + 20,
-    '=': divisions + 21,
+    // Row 3 (Top/Numbers)
+    1: divisions + 13,
+    2: divisions + 14,
+    3: divisions + 15,
+    4: divisions + 16,
+    5: divisions + 17,
+    6: divisions + 18,
+    7: divisions + 19,
+    8: divisions + 20,
+    9: divisions + 21,
+    0: divisions + 22,
+    '-': divisions + 23,
+    '=': divisions + 24,
   };
 
   useEffect(() => {
@@ -78,7 +87,6 @@ export const useKeyboardControls = ({
       const nodes = handleNotePlay(note, true);
 
       if (nodes) {
-        // Map oscillators by the physical code (e.g., 'KeyZ') for 1:1 tracking
         setActiveOscillators((prev) => ({ ...prev, [e.code]: nodes }));
 
         if (setPressedKeys) {
