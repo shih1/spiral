@@ -14,11 +14,8 @@ export const useKeyboardControls = ({
 }) => {
   const { divisions } = config;
 
-  // Tier 1: Bottom two rows (continuous 0-20)
-  // Tier 2: Top two rows (continuous starting from divisions)
   const keyboardLayout = {
     // LOWER TIER
-    // Row 0 (Bottom)
     z: 0,
     x: 1,
     c: 2,
@@ -29,7 +26,6 @@ export const useKeyboardControls = ({
     ',': 7,
     '.': 8,
     '/': 9,
-    // Row 1 (Middle-Lower)
     a: 10,
     s: 11,
     d: 12,
@@ -43,7 +39,6 @@ export const useKeyboardControls = ({
     "'": 20,
 
     // UPPER TIER
-    // Row 2 (Middle-Upper)
     q: divisions + 0,
     w: divisions + 1,
     e: divisions + 2,
@@ -57,7 +52,6 @@ export const useKeyboardControls = ({
     '[': divisions + 10,
     ']': divisions + 11,
     '\\': divisions + 12,
-    // Row 3 (Top/Numbers)
     1: divisions + 13,
     2: divisions + 14,
     3: divisions + 15,
@@ -76,7 +70,9 @@ export const useKeyboardControls = ({
     if (!enabled) return;
 
     const handleKeyDown = (e) => {
-      if (e.repeat) return;
+      // Ignore if repeating or if system modifiers (Cmd, Ctrl, Alt) are active
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+
       const keyChar = e.key.toLowerCase();
       const noteIndex = keyboardLayout[keyChar];
 
@@ -128,12 +124,27 @@ export const useKeyboardControls = ({
       }
     };
 
+    // Emergency release for when the window loses focus (Cmd+Tab, Cmd+L, etc.)
+    const handleBlur = () => {
+      Object.values(activeOscillators).forEach((nodeGroup) => {
+        const { oscillator, gainNode, id } = nodeGroup;
+        stopNote(oscillator, gainNode);
+        releaseNote(id); // Release without specific step to clear all
+      });
+
+      setActiveOscillators({});
+      if (setPressedKeys) setPressedKeys(new Set());
+      setActiveNote(null);
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
     };
   }, [
     enabled,

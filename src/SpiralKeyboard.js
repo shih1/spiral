@@ -61,7 +61,7 @@ const getKeyColor = (note, config, isActive, isPitchClassHeld, hueShift, pulseIn
 };
 
 const renderKey = (ctx, note, config, isActive, isPitchClassHeld, pulsePhase) => {
-  const { keyWidth, keyHeight } = config;
+  const { keyWidth, keyHeight, showLabels } = config; // REINTRODUCED: showLabels
 
   const rawPulse = Math.sin(pulsePhase);
   const pulseIntensity = isActive ? rawPulse * 0.5 + 0.5 : 1;
@@ -96,6 +96,18 @@ const renderKey = (ctx, note, config, isActive, isPitchClassHeld, pulsePhase) =>
   ctx.lineWidth = isActive ? 4 + pulseIntensity * 2 : isPitchClassHeld ? 2.5 : 2;
   ctx.fillRect(-w / 2, -h / 2, w, h);
   ctx.strokeRect(-w / 2, -h / 2, w, h);
+
+  // REINTRODUCED: Draw Frequency Labels
+  if (showLabels) {
+    ctx.save();
+    // Rotate text so it's readable along the key
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = isActive ? 'white' : isPitchClassHeld ? '#1a1a2e' : '#666666';
+    ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(note.freq)}Hz`, 0, 4);
+    ctx.restore();
+  }
 
   ctx.shadowBlur = 0;
 
@@ -153,8 +165,6 @@ const SpiralKeyboard = ({
   const animationFrameRef = useRef(null);
   const [pulsePhase, setPulsePhase] = useState(0);
 
-  // Use a Ref for the mouse tracking to ensure the Move handler
-  // always has the most current value without needing a re-render
   const lastMouseNoteRef = useRef(null);
 
   const width = 700;
@@ -201,18 +211,12 @@ const SpiralKeyboard = ({
   };
 
   const handleMouseMove = (e) => {
-    // Check if the primary mouse button is pressed (1)
     if (e.buttons !== 1) return;
-
     const currentNote = getNoteAtPos(e.clientX, e.clientY);
-
-    // Only do something if the note under the mouse has changed
     if (currentNote !== lastMouseNoteRef.current) {
-      // Turn off the previous note if it exists
       if (lastMouseNoteRef.current) {
         onNoteOff?.(lastMouseNoteRef.current);
       }
-      // Turn on the new note if it exists
       if (currentNote) {
         onNoteClick(currentNote);
       }
