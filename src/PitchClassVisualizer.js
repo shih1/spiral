@@ -1,235 +1,168 @@
-import React, { useEffect, useRef, useMemo } from 'react';
-
-// ============================================================================
-// CANVAS RENDERING COMPONENTS
-// ============================================================================
-
-/**
- * Background - Renders dark gradient background
- */
-const renderBackground = (ctx, width, height) => {
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const bgGradient = ctx.createRadialGradient(
-    centerX,
-    centerY,
-    0,
-    centerX,
-    centerY,
-    Math.max(width, height) / 2
-  );
-  bgGradient.addColorStop(0, '#1a1a2e');
-  bgGradient.addColorStop(1, '#0a0a0a');
-  ctx.fillStyle = bgGradient;
-  ctx.fillRect(0, 0, width, height);
-};
-
-/**
- * CenterDot - Renders the center point of the spiral
- */
-const renderCenterDot = (ctx, width, height) => {
-  const centerX = width / 2;
-  const centerY = height / 2;
-
-  const centerGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 15);
-  centerGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-  centerGradient.addColorStop(0.5, 'rgba(100, 200, 255, 0.4)');
-  centerGradient.addColorStop(1, 'rgba(100, 200, 255, 0)');
-  ctx.fillStyle = centerGradient;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, 15, 0, 2 * Math.PI);
-  ctx.fill();
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, 6, 0, 2 * Math.PI);
-  ctx.fill();
-};
-
-// ============================================================================
-// PITCH CLASS VISUALIZER COMPONENT
-// ============================================================================
+import React, { useEffect, useRef } from 'react';
+import { useMusicalSpace } from './hooks/useMusicalSpace';
 
 const PitchClassVisualizer = ({ config, activePitchClasses, heldNotes, releasedNotes }) => {
   const canvasRef = useRef(null);
-  const staticLayerRef = useRef(null); // Cache static elements
+  const staticLayerRef = useRef(null);
   const animationFrameRef = useRef(null);
 
   const { divisions, releaseTime } = config;
+  const { getCoordinates } = useMusicalSpace(config);
+
   const width = 700;
   const height = 700;
   const centerX = width / 2;
   const centerY = height / 2;
+  const radius = Math.min(width, height) / 2 - 50;
 
-  // Pre-calculate angle positions (ONLY recalculate when divisions change)
-  const anglePositions = useMemo(() => {
-    const positions = [];
-    for (let i = 0; i < divisions; i++) {
-      const angle = (i / divisions) * 2 * Math.PI;
-      const endX = centerX + Math.cos(angle) * (Math.min(width, height) / 2 - 20);
-      const endY = centerY + Math.sin(angle) * (Math.min(width, height) / 2 - 20);
-      const labelDist = Math.min(width, height) / 2 - 10;
-      const labelX = centerX + Math.cos(angle) * labelDist;
-      const labelY = centerY + Math.sin(angle) * labelDist;
-      positions.push({ angle, endX, endY, labelX, labelY, pitch: i });
-    }
-    return positions;
-  }, [divisions]);
+  // PROJECTOR: Map 3D Space points to 2D Screen Pixels
+  const project = (coords) => {
+    if (!coords) return null;
+    return {
+      x: centerX + coords.x * radius,
+      y: centerY + coords.y * radius,
+      // Use Z (octave) to influence visual depth/size
+      size: 6 + coords.z * 2.5,
+      opacity: 1.0 - coords.z * 0.05,
+    };
+  };
 
-  // Draw static layer ONCE (only when divisions change)
+  // STATIC LAYER: Render Background and Pitch Class Axes
   useEffect(() => {
     if (!staticLayerRef.current) {
       staticLayerRef.current = document.createElement('canvas');
       staticLayerRef.current.width = width;
       staticLayerRef.current.height = height;
     }
+    const ctx = staticLayerRef.current.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
 
-    const staticCtx = staticLayerRef.current.getContext('2d');
-    staticCtx.clearRect(0, 0, width, height);
+    // Background Radial Gradient
+    const bgGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius + 50);
+    bgGradient.addColorStop(0, '#121225');
+    bgGradient.addColorStop(1, '#050505');
+    ctx.fillStyle = bgGradient;
+    ctx.fillRect(0, 0, width, height);
 
-    // Draw background
-    renderBackground(staticCtx, width, height);
+    // Render Axes based on divisions
+    for (let i = 0; i < divisions; i++) {
+      const coords = getCoordinates(i);
+      const pos = project(coords);
 
-    // Draw pitch class grid (static - only changes with divisions)
-    anglePositions.forEach(({ endX, endY, labelX, labelY, pitch }) => {
-      staticCtx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
-      staticCtx.lineWidth = 1;
-      staticCtx.shadowBlur = 3;
-      staticCtx.shadowColor = 'rgba(100, 100, 100, 0.2)';
-      staticCtx.beginPath();
-      staticCtx.moveTo(centerX, centerY);
-      staticCtx.lineTo(endX, endY);
-      staticCtx.stroke();
-      staticCtx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(100, 100, 150, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
 
-      staticCtx.fillStyle = 'rgba(180, 180, 180, 0.7)';
-      staticCtx.font = 'bold 11px sans-serif';
-      staticCtx.textAlign = 'center';
-      staticCtx.textBaseline = 'middle';
-      staticCtx.fillText(pitch.toString(), labelX, labelY);
-    });
+      // Labels
+      const labelX = centerX + Math.cos(coords.theta) * (radius + 25);
+      const labelY = centerY + Math.sin(coords.theta) * (radius + 25);
+      ctx.fillStyle = 'rgba(150, 150, 150, 0.5)';
+      ctx.font = '10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(i.toString(), labelX, labelY);
+    }
 
-    // Draw center dot
-    renderCenterDot(staticCtx, width, height);
+    // Center Core
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }, [divisions, getCoordinates]);
 
-    // Draw title
-    staticCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    staticCtx.fillRect(centerX - 60, 5, 120, 45);
-    staticCtx.fillStyle = '#ffffff';
-    staticCtx.font = 'bold 16px sans-serif';
-    staticCtx.textAlign = 'center';
-    staticCtx.fillText('Pitch Class', centerX, 23);
-    staticCtx.font = '12px sans-serif';
-    staticCtx.fillStyle = '#64c8ff';
-    staticCtx.fillText('Visualizer', centerX, 40);
-  }, [divisions, anglePositions]);
-
-  // Render dynamic layer using requestAnimationFrame
+  // DYNAMIC LAYER: Render Chord Shapes and Active Notes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const ctx = canvas.getContext('2d');
 
     const render = () => {
-      const ctx = canvas.getContext('2d');
-
-      // Copy static layer
-      if (staticLayerRef.current) {
-        ctx.drawImage(staticLayerRef.current, 0, 0);
-      }
+      ctx.drawImage(staticLayerRef.current, 0, 0);
 
       const now = Date.now();
-      const activeReleasedNotes = releasedNotes.filter((n) => now - n.time < releaseTime);
-      const allActiveNotes = [...heldNotes, ...activeReleasedNotes];
-      const uniquePitches = [...new Set(allActiveNotes.map((n) => n.pitch))];
+      const activeReleased = releasedNotes.filter((n) => now - n.time < releaseTime);
+      const allActive = [...heldNotes, ...activeReleased];
 
-      // Draw chord shape
-      if (uniquePitches.length >= 2) {
+      // 1. Draw "Best Geometric Shape" (Chord Hull)
+      if (allActive.length >= 2) {
+        const uniquePitches = Array.from(new Set(allActive.map((n) => n.pitch))).sort(
+          (a, b) => a - b
+        );
+
         ctx.beginPath();
-        uniquePitches.forEach((pitch, index) => {
-          const pos = anglePositions[pitch];
-          if (!pos) return;
-          if (index === 0) {
-            ctx.moveTo(pos.endX, pos.endY);
-          } else {
-            ctx.lineTo(pos.endX, pos.endY);
-          }
+        uniquePitches.forEach((p, i) => {
+          const pos = project(getCoordinates(p));
+          if (i === 0) ctx.moveTo(pos.x, pos.y);
+          else ctx.lineTo(pos.x, pos.y);
         });
         ctx.closePath();
 
-        const chordGradient = ctx.createRadialGradient(
-          centerX,
-          centerY,
-          0,
-          centerX,
-          centerY,
-          Math.min(width, height) / 2
-        );
-        chordGradient.addColorStop(0, 'rgba(0, 255, 255, 0.25)');
-        chordGradient.addColorStop(1, 'rgba(0, 255, 255, 0.05)');
-        ctx.fillStyle = chordGradient;
+        // Stylized Fill
+        const polyGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+        polyGrad.addColorStop(0, 'rgba(0, 255, 255, 0.15)');
+        polyGrad.addColorStop(1, 'rgba(0, 255, 255, 0.02)');
+        ctx.fillStyle = polyGrad;
         ctx.fill();
 
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
-        ctx.lineWidth = 3;
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = 'rgba(0, 255, 255, 1)';
+        // Stylized Stroke
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
         ctx.stroke();
-        ctx.shadowBlur = 0;
+        ctx.setLineDash([]);
       }
 
-      // Draw active pitch classes
-      activePitchClasses.forEach(({ pitch, opacity }) => {
-        if (pitch === null || pitch >= anglePositions.length) return;
+      // 2. Draw Individual Active Notes
+      allActive.forEach((note) => {
+        const coords = getCoordinates(note.pitch + note.octave * divisions);
+        const pos = project(coords);
 
-        const pos = anglePositions[pitch];
-        const color = [0, 255, 136];
+        let fade = 1.0;
+        if (note.time) {
+          // Note is in release phase
+          fade = Math.max(0, 1 - (now - note.time) / releaseTime);
+        }
 
-        ctx.strokeStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${opacity})`;
-        ctx.lineWidth = 5;
-        ctx.shadowBlur = 25 * opacity;
-        ctx.shadowColor = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${opacity * 0.8})`;
+        // Outer Glow
+        ctx.shadowBlur = 20 * fade;
+        ctx.shadowColor = `rgba(0, 255, 136, ${fade})`;
+        ctx.fillStyle = `rgba(0, 255, 136, ${fade})`;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, pos.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Inner Core (Highlight)
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = `rgba(255, 255, 255, ${fade * 0.9})`;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, pos.size / 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Tracer line to center
+        ctx.strokeStyle = `rgba(0, 255, 136, ${fade * 0.2})`;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
-        ctx.lineTo(pos.endX, pos.endY);
+        ctx.lineTo(pos.x, pos.y);
         ctx.stroke();
-
-        ctx.shadowBlur = 35 * opacity;
-        ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${opacity})`;
-        ctx.beginPath();
-        ctx.arc(pos.endX, pos.endY, 8, 0, 2 * Math.PI);
-        ctx.fill();
-
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.8})`;
-        ctx.beginPath();
-        ctx.arc(pos.endX, pos.endY, 3, 0, 2 * Math.PI);
-        ctx.fill();
-
-        ctx.shadowBlur = 0;
       });
 
-      // Continue animation loop if there are active notes
-      if (activePitchClasses.length > 0 || allActiveNotes.length > 0) {
-        animationFrameRef.current = requestAnimationFrame(render);
-      }
+      animationFrameRef.current = requestAnimationFrame(render);
     };
 
-    // Start rendering
     animationFrameRef.current = requestAnimationFrame(render);
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [config, activePitchClasses, heldNotes, releasedNotes, anglePositions, releaseTime]);
+    return () => cancelAnimationFrame(animationFrameRef.current);
+  }, [heldNotes, releasedNotes, getCoordinates, releaseTime]);
 
   return (
     <canvas
       ref={canvasRef}
       width={width}
       height={height}
-      className="border border-gray-700 rounded flex-shrink-0"
+      className="border border-gray-700 rounded-xl bg-black shadow-2xl"
     />
   );
 };
