@@ -6,10 +6,9 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
   const animationRef = useRef(null);
   const [mode, setMode] = useState('fft');
   const lastFrameTimeRef = useRef(0);
-  const TARGET_FPS = 60; // Cap visualizer at 60fps
+  const TARGET_FPS = 60;
   const frameInterval = 1000 / TARGET_FPS;
 
-  // Ref to store peak values for the ghost line
   const peaksRef = useRef(new Float32Array(0));
 
   useEffect(() => {
@@ -26,7 +25,6 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
     const freqDataArray = new Uint8Array(bufferLength);
     const sampleRate = audioContext.sampleRate;
 
-    // Initialize peaks array if size changed
     if (peaksRef.current.length !== width) {
       peaksRef.current = new Float32Array(width).fill(0);
     }
@@ -45,7 +43,6 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
     const draw = (currentTime) => {
       animationRef.current = requestAnimationFrame(draw);
 
-      // Frame limiting: only draw if enough time has passed
       const elapsed = currentTime - lastFrameTimeRef.current;
       if (elapsed < frameInterval) return;
       lastFrameTimeRef.current = currentTime - (elapsed % frameInterval);
@@ -54,75 +51,74 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
       ctx.fillRect(0, 0, width, height);
 
       const nyquist = sampleRate / 2;
+      const samplesShown = 1024;
 
-      if (mode === 'oscilloscope') {
+      // --- OSCILLOSCOPE SECTION ---
+      if (mode === 'oscilloscope' || mode === 'split') {
+        const isSplit = mode === 'split';
+        const activeWidth = isSplit ? width / 2 : width;
+
         analyserNode.getByteTimeDomainData(timeDataArray);
+        const trigger = findStableTrigger(timeDataArray);
 
-        // Grid
+        // Time Domain Grid & Labels
         ctx.strokeStyle = 'rgba(60, 60, 80, 0.3)';
         ctx.lineWidth = 1;
         for (let i = 1; i < 4; i++) {
           const y = (height / 4) * i;
           ctx.beginPath();
           ctx.moveTo(0, y);
-          ctx.lineTo(width, y);
+          ctx.lineTo(activeWidth, y);
           ctx.stroke();
         }
 
-        // Time labels
         ctx.font = '10px monospace';
         ctx.fillStyle = 'rgba(200, 200, 200, 0.4)';
-        const samplesShown = 1024;
-        const timeShown = (samplesShown / sampleRate) * 1000; // in ms
-        const timeMarkers = [0, 0.25, 0.5, 0.75, 1.0];
-        timeMarkers.forEach((t) => {
-          const x = t * width;
-          const timeMs = t * timeShown;
-          const label = timeMs >= 1 ? `${timeMs.toFixed(1)}ms` : `${(timeMs * 1000).toFixed(0)}µs`;
+        const msShown = (samplesShown / sampleRate) * 1000;
+        [0, 0.5, 1.0].forEach((t) => {
+          const x = t * activeWidth;
+          const label = `${(t * msShown).toFixed(1)}ms`;
           ctx.fillText(label, x + 2, height - 10);
         });
 
-        const trigger = findStableTrigger(timeDataArray);
+        // Waveform Drawing (Always Cyan)
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#00fbff';
         ctx.beginPath();
-        for (let i = 0; i < samplesShown; i++) {
-          const x = (i / samplesShown) * width;
-          const y = (timeDataArray[trigger + i] / 255) * height;
-          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        for (let i = 0; i < activeWidth; i++) {
+          const sampleIdx = trigger + Math.floor((i / activeWidth) * samplesShown);
+          const y = (timeDataArray[sampleIdx] / 255) * height;
+          i === 0 ? ctx.moveTo(i, y) : ctx.lineTo(i, y);
         }
         ctx.stroke();
-      } else if (mode === 'fft' || mode === 'split') {
+      }
+
+      // --- FFT SECTION ---
+      if (mode === 'fft' || mode === 'split') {
         analyserNode.getByteFrequencyData(freqDataArray);
         const isSplit = mode === 'split';
         const activeWidth = isSplit ? width / 2 : width;
         const xOffset = isSplit ? width / 2 : 0;
 
-        // Define frequency range (50Hz to 10kHz)
         const minFreq = 50;
         const maxFreq = 10000;
         const logMin = Math.log10(minFreq);
         const logMax = Math.log10(maxFreq);
 
-        // 1. Draw Logarithmic Grid & Labels
+        // Frequency Grid & Labels
         ctx.font = '10px monospace';
-        const freqMarkers = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
-        freqMarkers.forEach((f) => {
+        [100, 1000, 5000, 10000].forEach((f) => {
           const logPos = (Math.log10(f) - logMin) / (logMax - logMin);
           const x = xOffset + logPos * activeWidth;
-
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
           ctx.beginPath();
           ctx.moveTo(x, 0);
           ctx.lineTo(x, height);
           ctx.stroke();
-
           ctx.fillStyle = 'rgba(200, 200, 200, 0.4)';
-          const label = f >= 1000 ? `${f / 1000}k` : f;
-          ctx.fillText(label, x + 2, height - 10);
+          ctx.fillText(f >= 1000 ? `${f / 1000}k` : f, x + 2, height - 10);
         });
 
-        // 2. Calculate Path and Update Peaks
         const points = [];
         for (let x = 0; x < activeWidth; x++) {
           const logFreq = logMin + (x / activeWidth) * (logMax - logMin);
@@ -130,7 +126,6 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
           const binIndex = (freq / nyquist) * bufferLength;
           const i = Math.floor(binIndex);
           const fraction = binIndex - i;
-
           const val =
             i < bufferLength - 1
               ? freqDataArray[i] * (1 - fraction) + freqDataArray[i + 1] * fraction
@@ -139,16 +134,15 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
           const y = height - (val / 255) * height;
           points.push({ x: xOffset + x, y });
 
-          // Peak/Ghost logic: slow decay
           const peakIdx = isSplit ? x + Math.floor(width / 2) : x;
           if (y < peaksRef.current[peakIdx] || peaksRef.current[peakIdx] === 0) {
-            peaksRef.current[peakIdx] = y; // New peak (lower Y is higher signal)
+            peaksRef.current[peakIdx] = y;
           } else {
-            peaksRef.current[peakIdx] += 0.75; // Gravity decay
+            peaksRef.current[peakIdx] += 0.75;
           }
         }
 
-        // 3. Draw Fill Area
+        // FFT Visuals
         const fillGrad = ctx.createLinearGradient(0, 0, 0, height);
         fillGrad.addColorStop(0, 'rgba(0, 251, 255, 0.15)');
         fillGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
@@ -159,42 +153,29 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
         ctx.fillStyle = fillGrad;
         ctx.fill();
 
-        // 4. Draw Main Solid Line
         ctx.strokeStyle = '#00fbff';
         ctx.lineWidth = 2;
         ctx.beginPath();
         points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
         ctx.stroke();
 
-        // 5. Draw Ghost (Peak) Line
+        // Peaks
         ctx.strokeStyle = 'rgba(0, 251, 255, 0.3)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (let x = 0; x < activeWidth; x++) {
           const peakIdx = isSplit ? x + Math.floor(width / 2) : x;
-          const px = xOffset + x;
-          const py = peaksRef.current[peakIdx];
-          x === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          ctx.lineTo(xOffset + x, peaksRef.current[peakIdx]);
         }
         ctx.stroke();
 
         if (isSplit) {
-          // Draw Oscilloscope on Left for Split Mode
-          analyserNode.getByteTimeDomainData(timeDataArray);
-          const trigger = findStableTrigger(timeDataArray);
-          ctx.strokeStyle = '#bc00ff';
-          ctx.beginPath();
-          for (let i = 0; i < activeWidth; i++) {
-            const y = (timeDataArray[trigger + i] / 255) * height;
-            i === 0 ? ctx.moveTo(i, y) : ctx.lineTo(i, y);
-          }
-          ctx.stroke();
-          // Divider
+          // Vertical Divider
           ctx.setLineDash([5, 5]);
-          ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
           ctx.beginPath();
-          ctx.moveTo(activeWidth, 0);
-          ctx.lineTo(activeWidth, height);
+          ctx.moveTo(width / 2, 0);
+          ctx.lineTo(width / 2, height);
           ctx.stroke();
           ctx.setLineDash([]);
         }
@@ -210,12 +191,12 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-cyan-500/10 rounded-lg">
-            <BarChart3 size={18} className="text-cyan-400" />
+            <Activity size={18} className="text-cyan-400" />
           </div>
           <div>
-            <h3 className="text-white text-sm font-bold tracking-tight">Spectrum Analyzer</h3>
+            <h3 className="text-white text-sm font-bold tracking-tight">Signal Analyzer</h3>
             <p className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">
-              Real-time FFT
+              {mode === 'split' ? 'Scope / Spectrum' : mode}
             </p>
           </div>
         </div>
