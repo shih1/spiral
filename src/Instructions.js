@@ -8,36 +8,35 @@ const Instructions = () => {
       </p>
       <ul className="list-disc list-inside mt-2 space-y-1">
         <li>
-          <strong>Click any key</strong> to play its note (Web Audio API synthesizer)
+          <strong>Interactive Spiral:</strong> Click or tap keys to play notes. Drag your mouse or
+          finger across the keys to "glide" between notes.
         </li>
         <li>
-          <strong>Touch Support:</strong> Tap keys on mobile/tablet - use multiple fingers for
-          chords!
+          <strong>Keyboard Controls:</strong> Play with your computer keyboard using the reference
+          map at the bottom. The bottom rows (Z-/) handle lower octaves, while upper rows (Q-P)
+          handle higher octaves.
         </li>
         <li>
-          <strong>Keyboard Control:</strong> Enable the toggle to play with your computer keyboard
+          <strong>3D Visualizer:</strong> Switch between 2D and 3D visualization modes. Click and
+          drag on the 3D Tower to rotate and inspect the harmonic structure.
         </li>
         <li>
-          <strong>Bottom row (Z-/):</strong> Lower octave notes | <strong>Top row (A-;):</strong>{' '}
-          Higher octave notes
+          <strong>Microtonal Presets:</strong> Use the Settings panel to explore 12, 19, 24, 31, or
+          53-TET (Equal Temperament) tuning systems.
         </li>
         <li>
-          <strong>Polyphonic:</strong> Hold multiple keys simultaneously to play chords!
-        </li>
-        <li>Keys are arranged in a spiral - one full rotation = one octave</li>
-        <li>Green lines connect octave-equivalent notes (same pitch class)</li>
-        <li>
-          <strong>Pitch Class Visualizer:</strong> Green lines show active notes (bright when held,
-          fading after release)
+          <strong>Chord Detection:</strong> The 2D Visualizer automatically detects and labels
+          complex chords based on an expanded library.
         </li>
         <li>
-          <strong>Release Time:</strong> Controls how long notes remain visible after release
+          <strong>Mixer & Reverb:</strong> Use the Mixer panel to adjust master volume, toggle mute,
+          or control reverb wetness and decay for a spacious sound.
         </li>
         <li>
-          <strong>Hold notes</strong> to build chords, then release to see them fade over the
-          release time!
+          <strong>Visual Feedback:</strong> Active notes pulse and shimmer. Pitch classes are
+          highlighted with green lines, and trailing "released" notes fade based on your Release
+          Time setting.
         </li>
-        <li>Try different tuning systems to hear microtonal intervals!</li>
       </ul>
     </div>
   );
