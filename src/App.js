@@ -80,9 +80,7 @@ function App() {
           <div className="p-2 bg-blue-500/20 rounded-lg">
             <Volume2 className="text-blue-400" size={24} />
           </div>
-          <h1 className="text-xl font-bold text-white tracking-wide">
-            Interactive Microtonal Spiral
-          </h1>
+          <h1 className="text-xl font-bold text-white tracking-wide">Microtonal Spiral</h1>
         </div>
 
         <div className="flex items-center gap-4">
