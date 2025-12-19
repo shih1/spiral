@@ -74,17 +74,18 @@ const renderKey = (ctx, note, config, isActive, isPitchClassHeld, pulsePhase) =>
   const w = keyWidth;
   const h = keyHeight;
 
+  // GLOW / SHADOW LOGIC
   if (!isActive) {
     ctx.shadowBlur = 15;
     ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 4;
   } else {
+    // Intense rainbow glow for active keys
     ctx.shadowBlur = 40 + pulseIntensity * 40;
     ctx.shadowColor = `hsla(${hueShift}, 100%, 60%, ${0.8 + pulseIntensity * 0.2})`;
-  }
 
-  if (isActive) {
+    // Outer border "aurora" effect
     ctx.strokeStyle = `hsla(${hueShift}, 100%, 70%, ${pulseIntensity * 0.7})`;
     ctx.lineWidth = 6 + pulseIntensity * 4;
     ctx.strokeRect(-w / 2 - 4, -h / 2 - 4, w + 8, h + 8);
@@ -102,11 +103,11 @@ const renderKey = (ctx, note, config, isActive, isPitchClassHeld, pulsePhase) =>
   ctx.fillRect(-w / 2, -h / 2, w, h);
   ctx.strokeRect(-w / 2, -h / 2, w, h);
 
+  // Remove shadow for internal details
   ctx.shadowBlur = 0;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
 
   if (isActive) {
+    // Rainbow Shimmer Overlay
     const shimmerGradient = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
     shimmerGradient.addColorStop(0, `hsla(${hueShift}, 100%, 80%, ${pulseIntensity * 0.5})`);
     shimmerGradient.addColorStop(
@@ -126,6 +127,7 @@ const renderKey = (ctx, note, config, isActive, isPitchClassHeld, pulsePhase) =>
     ctx.fillRect(-w / 2, -h / 2, w, h);
   }
 
+  // Final lighting gradient
   const gradient = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
   if (isActive) {
     gradient.addColorStop(0, `rgba(255, 255, 255, ${0.8 * pulseIntensity})`);
@@ -143,19 +145,23 @@ const renderKey = (ctx, note, config, isActive, isPitchClassHeld, pulsePhase) =>
   ctx.fillStyle = gradient;
   ctx.fillRect(-w / 2, -h / 2, w, h);
 
-  if (isActive && pulseIntensity > 0.8) {
-    ctx.fillStyle = `rgba(255, 255, 255, ${(pulseIntensity - 0.8) * 5})`;
-    ctx.fillRect(-w / 2, -h / 2, w, h);
-  }
-
   ctx.restore();
 };
 
-const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick, heldNotes }) => {
+const SpiralKeyboard = ({
+  config,
+  activeNote,
+  notes,
+  setNotes,
+  onNoteClick,
+  onNoteOff,
+  heldNotes,
+}) => {
   const canvasRef = useRef(null);
   const staticLayerRef = useRef(null);
   const animationFrameRef = useRef(null);
   const [pulsePhase, setPulsePhase] = useState(0);
+  const [lastMouseNote, setLastMouseNote] = useState(null);
 
   const width = 700;
   const height = 700;
@@ -168,75 +174,79 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick, held
     return newNotes;
   }, [config, setNotes]);
 
+  const getNoteAtPos = useCallback(
+    (clientX, clientY) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      for (const note of calculatedNotes) {
+        const dx = x - note.x;
+        const dy = y - note.y;
+        const cos = Math.cos(-(note.angle + Math.PI / 2));
+        const sin = Math.sin(-(note.angle + Math.PI / 2));
+        const localX = dx * cos - dy * sin;
+        const localY = dx * sin + dy * cos;
+        if (Math.abs(localX) < config.keyWidth / 2 && Math.abs(localY) < config.keyHeight / 2) {
+          return note;
+        }
+      }
+      return null;
+    },
+    [calculatedNotes, config.keyWidth, config.keyHeight]
+  );
+
+  const handleMouseDown = (e) => {
+    const note = getNoteAtPos(e.clientX, e.clientY);
+    if (note) {
+      setLastMouseNote(note);
+      onNoteClick(note);
+    }
+  };
+
+  const handleMouseUp = useCallback(() => {
+    if (lastMouseNote) {
+      onNoteOff?.(lastMouseNote);
+      setLastMouseNote(null);
+    }
+  }, [lastMouseNote, onNoteOff]);
+
   useEffect(() => {
     if (!staticLayerRef.current) {
       staticLayerRef.current = document.createElement('canvas');
       staticLayerRef.current.width = width;
       staticLayerRef.current.height = height;
     }
-
     const ctx = staticLayerRef.current.getContext('2d');
     ctx.clearRect(0, 0, width, height);
 
-    const bgGradient = ctx.createRadialGradient(
-      centerX,
-      centerY,
-      0,
-      centerX,
-      centerY,
-      Math.max(width, height) / 2
-    );
+    const bgGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 350);
     bgGradient.addColorStop(0, '#1a1a2e');
     bgGradient.addColorStop(1, '#0a0a0a');
     ctx.fillStyle = bgGradient;
     ctx.fillRect(0, 0, width, height);
 
     const { divisions, octaves, baseFreq, spiralTightness, keyHeight } = config;
-
-    // INNER EDGE SPIRAL - Starting at the base of the first note
     if (calculatedNotes.length > 0) {
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; // Slightly brighter for visibility
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.lineWidth = 2.5;
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.25)';
-
       const totalSteps = divisions * octaves;
-      const resolution = 12;
-
-      for (let i = 0; i <= totalSteps * resolution; i++) {
-        const t = i / resolution;
+      for (let i = 0; i <= totalSteps * 12; i++) {
+        const t = i / 12;
         const theta = (t / divisions) * 2 * Math.PI;
         const freq = baseFreq * Math.pow(2, t / divisions);
         const baseR = 80 + Math.log2(freq / baseFreq) * 60;
-
-        const rawR = baseR + theta * spiralTightness * 15;
-        const innerEdgeR = rawR - keyHeight / 2;
-
+        const innerEdgeR = baseR + theta * spiralTightness * 15 - keyHeight / 2;
         const px = centerX + innerEdgeR * Math.cos(theta);
         const py = centerY + innerEdgeR * Math.sin(theta);
-
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
       ctx.stroke();
-      ctx.shadowBlur = 0;
     }
-
-    // Origin Glow (kept as a visual anchor)
-    const centerGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 15);
-    centerGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-    centerGradient.addColorStop(0.5, 'rgba(100, 200, 255, 0.4)');
-    centerGradient.addColorStop(1, 'rgba(100, 200, 255, 0)');
-    ctx.fillStyle = centerGradient;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 15, 0, 2 * Math.PI);
-    ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 6, 0, 2 * Math.PI);
-    ctx.fill();
   }, [config, calculatedNotes, centerX, centerY]);
 
   useEffect(() => {
@@ -249,29 +259,26 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick, held
       setPulsePhase(newPhase);
 
       const canvas = canvasRef.current;
-      if (!canvas || !staticLayerRef.current) return;
-
+      if (!canvas) return;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(staticLayerRef.current, 0, 0);
 
-      // Pass 1: Inactive keys
+      // --- PASS 1: DRAW INACTIVE KEYS ---
       calculatedNotes.forEach((note) => {
         const isExactNoteHeld = heldNotes.some(
-          (held) => held.pitch === note.step && held.octave === note.octave
+          (h) => h.pitch === note.step && h.octave === note.octave
         );
         const isActive = isExactNoteHeld || activeNote === note.freq;
         if (!isActive) {
-          const isPitchClassHeld = heldNotes.some(
-            (held) => held.pitch === note.step && held.octave !== note.octave
-          );
+          const isPitchClassHeld = heldNotes.some((h) => h.pitch === note.step);
           renderKey(ctx, note, config, false, isPitchClassHeld, newPhase);
         }
       });
 
-      // Pass 2: Active keys on top
+      // --- PASS 2: DRAW ACTIVE KEYS (ON TOP) ---
       calculatedNotes.forEach((note) => {
         const isExactNoteHeld = heldNotes.some(
-          (held) => held.pitch === note.step && held.octave === note.octave
+          (h) => h.pitch === note.step && h.octave === note.octave
         );
         const isActive = isExactNoteHeld || activeNote === note.freq;
         if (isActive) {
@@ -281,44 +288,26 @@ const SpiralKeyboard = ({ config, activeNote, notes, setNotes, onNoteClick, held
 
       animationFrameRef.current = requestAnimationFrame(animate);
     };
-
     animationFrameRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrameRef.current);
   }, [heldNotes, activeNote, config, calculatedNotes, pulsePhase]);
-
-  const handleInteraction = useCallback(
-    (clientX, clientY) => {
-      const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-
-      for (const note of calculatedNotes) {
-        const dx = x - note.x;
-        const dy = y - note.y;
-        const cos = Math.cos(-(note.angle + Math.PI / 2));
-        const sin = Math.sin(-(note.angle + Math.PI / 2));
-        const localX = dx * cos - dy * sin;
-        const localY = dx * sin + dy * cos;
-
-        if (Math.abs(localX) < config.keyWidth / 2 && Math.abs(localY) < config.keyHeight / 2) {
-          onNoteClick(note);
-          break;
-        }
-      }
-    },
-    [calculatedNotes, config.keyWidth, config.keyHeight, onNoteClick]
-  );
 
   return (
     <canvas
       ref={canvasRef}
       width={width}
       height={height}
-      onClick={(e) => handleInteraction(e.clientX, e.clientY)}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
       onTouchStart={(e) => {
         e.preventDefault();
-        Array.from(e.touches).forEach((t) => handleInteraction(t.clientX, t.clientY));
+        const note = getNoteAtPos(e.touches[0].clientX, e.touches[0].clientY);
+        if (note) onNoteClick(note);
+      }}
+      onTouchEnd={(e) => {
+        e.preventDefault();
+        handleMouseUp();
       }}
       className="border border-gray-700 rounded cursor-pointer flex-shrink-0"
       style={{ touchAction: 'none' }}
