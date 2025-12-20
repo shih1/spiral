@@ -38,7 +38,7 @@ function App() {
 
   const [mixer, setMixer] = useState({ masterVolume: 0.7, muted: false });
   const [reverb, setReverb] = useState({ enabled: true, wet: 0.3, decay: 2.0 });
-  const [waveform, setWaveform] = useState('sine');
+  const [waveform, setWaveform] = useState(0); // 0-1 position value for morphing
 
   // ADSR State
   const [adsr, setAdsr] = useState({

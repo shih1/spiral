@@ -14,6 +14,7 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
   const dryGainRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const activeOscillatorsMapRef = useRef(new Map()); // Track active oscillators for real-time updates
 
   // Initialize Audio Context with Master Gain and Reverb
   useEffect(() => {
@@ -119,6 +120,79 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
     }
   }, [reverb.enabled, reverb.wet, reverb.decay]);
 
+  // Create PeriodicWave for morphing between waveforms
+  const createMorphedWave = useCallback((position) => {
+    const ctx = audioContextRef.current;
+    if (!ctx) return null;
+
+    const size = 2048;
+    const real = new Float32Array(size);
+    const imag = new Float32Array(size);
+
+    // Generate harmonics based on position
+    if (position <= 0.33) {
+      // Between sine and triangle
+      const blend = position / 0.33;
+
+      // Sine: fundamental only
+      // Triangle: odd harmonics with 1/n^2 amplitude
+      for (let n = 1; n < size; n++) {
+        if (n % 2 === 1) {
+          // Odd harmonics
+          const triangleAmp = 1 / (n * n);
+          imag[n] = blend * triangleAmp + (1 - blend) * (n === 1 ? 1 : 0);
+        }
+      }
+    } else if (position <= 0.67) {
+      // Between triangle and sawtooth
+      const blend = (position - 0.33) / 0.34;
+
+      // Triangle: odd harmonics 1/n^2
+      // Sawtooth: all harmonics 1/n
+      for (let n = 1; n < size; n++) {
+        const sawAmp = 1 / n;
+        if (n % 2 === 1) {
+          const triangleAmp = 1 / (n * n);
+          imag[n] = (1 - blend) * triangleAmp + blend * sawAmp;
+        } else {
+          imag[n] = blend * sawAmp;
+        }
+      }
+    } else {
+      // Between sawtooth and square
+      const blend = (position - 0.67) / 0.33;
+
+      // Sawtooth: all harmonics 1/n
+      // Square: odd harmonics 1/n
+      for (let n = 1; n < size; n++) {
+        const sawAmp = 1 / n;
+        if (n % 2 === 1) {
+          const squareAmp = 1 / n;
+          imag[n] = sawAmp; // Both have odd harmonics
+        } else {
+          imag[n] = (1 - blend) * sawAmp; // Fade out even harmonics
+        }
+      }
+    }
+
+    return ctx.createPeriodicWave(real, imag, { disableNormalization: false });
+  }, []);
+
+  // Update all active oscillators when waveform changes
+  useEffect(() => {
+    const periodicWave = createMorphedWave(waveform);
+    if (!periodicWave) return;
+
+    // Update all currently playing oscillators
+    activeOscillatorsMapRef.current.forEach((osc) => {
+      try {
+        osc.setPeriodicWave(periodicWave);
+      } catch (e) {
+        // Oscillator might have already stopped
+      }
+    });
+  }, [waveform, createMorphedWave]);
+
   // Continuous animation loop for fading - ALWAYS RUNNING
   useEffect(() => {
     const animate = () => {
@@ -160,7 +234,7 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
     };
   }, [config.releaseTime]);
 
-  // Play a note with ADSR envelope and selected waveform
+  // Play a note with ADSR envelope and morphed waveform
   const playNote = useCallback(
     (freq, duration = 0.5, sustained = false) => {
       const ctx = audioContextRef.current;
@@ -176,7 +250,12 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
       gainNode.connect(reverbGainRef.current);
 
       oscillator.frequency.value = freq;
-      oscillator.type = waveform; // Use the selected waveform
+
+      // Use morphed periodic wave
+      const periodicWave = createMorphedWave(waveform);
+      if (periodicWave) {
+        oscillator.setPeriodicWave(periodicWave);
+      }
 
       const now = ctx.currentTime;
       const attackTime = adsr.attack;
@@ -201,14 +280,23 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
         gainNode.gain.linearRampToValueAtTime(0.001, releaseStart + adsr.release);
       }
 
+      const id = Date.now() + Math.random();
+
       oscillator.start(now);
       if (!sustained) {
         oscillator.stop(now + attackTime + decayTime + duration + adsr.release);
+        // Remove from active oscillators when done
+        setTimeout(() => {
+          activeOscillatorsMapRef.current.delete(id);
+        }, (attackTime + decayTime + duration + adsr.release) * 1000);
       }
 
-      return { oscillator, gainNode, id: Date.now() + Math.random() };
+      // Store oscillator for real-time waveform updates
+      activeOscillatorsMapRef.current.set(id, oscillator);
+
+      return { oscillator, gainNode, id };
     },
-    [adsr, waveform]
+    [adsr, waveform, createMorphedWave]
   );
 
   // Stop a note with ADSR release
@@ -226,6 +314,15 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
       // Apply ADSR release
       gainNode.gain.linearRampToValueAtTime(0.001, now + adsr.release);
       oscillator.stop(now + adsr.release);
+
+      // Remove from active oscillators map
+      setTimeout(() => {
+        activeOscillatorsMapRef.current.forEach((osc, key) => {
+          if (osc === oscillator) {
+            activeOscillatorsMapRef.current.delete(key);
+          }
+        });
+      }, adsr.release * 1000);
     },
     [adsr]
   );

@@ -115,10 +115,9 @@ const WaveformSelector = ({ waveform, setWaveform, className = '' }) => {
     const snappedPos = findClosestSnap(position);
     setPosition(snappedPos);
 
-    // Update waveform type
-    const wave = waveforms.find((w) => Math.abs(w.position - snappedPos) < 0.01);
-    if (wave && setWaveform) {
-      setWaveform(wave.type);
+    // Update waveform with snapped position
+    if (setWaveform) {
+      setWaveform(snappedPos);
     }
   };
 
@@ -131,6 +130,11 @@ const WaveformSelector = ({ waveform, setWaveform, className = '' }) => {
     let newPos = Math.max(0, Math.min(1, x / rect.width));
 
     setPosition(newPos);
+
+    // Update waveform in real-time while dragging
+    if (setWaveform && isDragging) {
+      setWaveform(newPos);
+    }
   };
 
   useEffect(() => {
@@ -197,7 +201,7 @@ const WaveformSelector = ({ waveform, setWaveform, className = '' }) => {
             key={idx}
             onClick={() => {
               setPosition(wave.position);
-              if (setWaveform) setWaveform(wave.type);
+              if (setWaveform) setWaveform(wave.position);
             }}
             className={`text-xs transition-colors ${
               Math.abs(position - wave.position) < 0.05
