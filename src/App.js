@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Volume2, Box, Circle } from 'lucide-react';
+import { Settings, Volume2, Box, Circle, Sliders } from 'lucide-react';
 import SpiralKeyboard from './SpiralKeyboard';
 import PitchClassVisualizer from './PitchClassVisualizer';
 import SpiralTowerVisualizer from './SpiralTowerVisualizer';
@@ -11,12 +11,14 @@ import { useKeyboardControls } from './hooks/useKeyboardControls';
 import PerformanceMonitor from './PerformanceMonitor';
 import KeyboardVisualizer from './KeyboardVisualizer';
 import AudioVisualizer from './AudioVisualizer';
+import ADSREnvelope from './ADSREnvelope';
 
 function App() {
   // UI State
   const [keyboardEnabled, setKeyboardEnabled] = useState(true);
   const [visualizationMode, setVisualizationMode] = useState('2D'); // '2D' or '3D'
   const [showSettings, setShowSettings] = useState(false);
+  const [showADSR, setShowADSR] = useState(false);
 
   // Musical State
   const [pressedKeys, setPressedKeys] = useState(new Set());
@@ -36,6 +38,14 @@ function App() {
   const [mixer, setMixer] = useState({ masterVolume: 0.7, muted: false });
   const [reverb, setReverb] = useState({ enabled: true, wet: 0.3, decay: 2.0 });
 
+  // ADSR State
+  const [adsr, setAdsr] = useState({
+    attack: 0.01,
+    decay: 0.1,
+    sustain: 0.7,
+    release: 0.5,
+  });
+
   const presets = { '12-TET': 12, '19-TET': 19, '24-TET': 24, '31-TET': 31, '53-TET': 53 };
 
   // Logic Hooks
@@ -52,7 +62,7 @@ function App() {
     releaseNote,
     analyser,
     audioContext,
-  } = useAudioManager(config, mixer, reverb);
+  } = useAudioManager(config, mixer, reverb, adsr);
 
   useKeyboardControls({
     enabled: keyboardEnabled,
@@ -102,6 +112,19 @@ function App() {
             </span>
           </button>
 
+          {/* ADSR Toggle Button */}
+          <button
+            onClick={() => setShowADSR(!showADSR)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white border transition-all shadow-inner ${
+              showADSR
+                ? 'bg-blue-600 border-blue-500'
+                : 'bg-gray-800 hover:bg-gray-700 border-gray-600'
+            }`}
+          >
+            <Sliders size={18} />
+            <span className="text-sm font-medium">ADSR</span>
+          </button>
+
           <label className="flex items-center text-white text-sm cursor-pointer hover:text-blue-300 transition-colors">
             <input
               type="checkbox"
@@ -124,6 +147,13 @@ function App() {
       {/* 3. Sliding Panels */}
       {showSettings && <SettingsPanel config={config} setConfig={setConfig} presets={presets} />}
       <MixerPanel mixer={mixer} setMixer={setMixer} reverb={reverb} setReverb={setReverb} />
+
+      {/* 3.5 ADSR Panel */}
+      {showADSR && (
+        <div className="p-4 flex justify-center bg-gray-900/50 border-b border-gray-700">
+          <ADSREnvelope adsr={adsr} setAdsr={setAdsr} />
+        </div>
+      )}
 
       {/* 4. Main Visualization Area */}
       <div className="flex-1 flex flex-col md:flex-row items-center justify-center p-4 gap-8 overflow-auto">

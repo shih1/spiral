@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-export const useAudioManager = (config, mixer, reverb) => {
+export const useAudioManager = (config, mixer, reverb, adsr) => {
   const [activeNote, setActiveNote] = useState(null);
   const [activePitchClasses, setActivePitchClasses] = useState([]);
   const [heldNotes, setHeldNotes] = useState([]);
@@ -160,46 +160,75 @@ export const useAudioManager = (config, mixer, reverb) => {
     };
   }, [config.releaseTime]);
 
-  // Play a note
-  const playNote = useCallback((freq, duration = 0.5, sustained = false) => {
-    const ctx = audioContextRef.current;
-    if (!ctx || !dryGainRef.current || !reverbGainRef.current) return null;
+  // Play a note with ADSR envelope
+  const playNote = useCallback(
+    (freq, duration = 0.5, sustained = false) => {
+      const ctx = audioContextRef.current;
+      if (!ctx || !dryGainRef.current || !reverbGainRef.current) return null;
 
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
 
-    oscillator.connect(gainNode);
+      oscillator.connect(gainNode);
 
-    // Split signal to both dry and wet (reverb) paths
-    gainNode.connect(dryGainRef.current);
-    gainNode.connect(reverbGainRef.current);
+      // Split signal to both dry and wet (reverb) paths
+      gainNode.connect(dryGainRef.current);
+      gainNode.connect(reverbGainRef.current);
 
-    oscillator.frequency.value = freq;
-    oscillator.type = 'sine';
-    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      oscillator.frequency.value = freq;
+      oscillator.type = 'sine';
 
-    if (!sustained) {
-      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
-    }
+      const now = ctx.currentTime;
+      const attackTime = adsr.attack;
+      const decayTime = adsr.decay;
+      const sustainLevel = adsr.sustain;
+      const peakLevel = 0.3; // Maximum volume
 
-    oscillator.start(ctx.currentTime);
-    if (!sustained) {
-      oscillator.stop(ctx.currentTime + duration);
-    }
+      // ADSR Envelope
+      // Start at 0
+      gainNode.gain.setValueAtTime(0, now);
 
-    return { oscillator, gainNode, id: Date.now() + Math.random() };
-  }, []);
+      // Attack: ramp up to peak
+      gainNode.gain.linearRampToValueAtTime(peakLevel, now + attackTime);
 
-  // Stop a note
-  const stopNote = useCallback((oscillator, gainNode) => {
-    const ctx = audioContextRef.current;
-    if (!ctx) return;
+      // Decay: ramp down to sustain level
+      gainNode.gain.linearRampToValueAtTime(peakLevel * sustainLevel, now + attackTime + decayTime);
 
-    gainNode.gain.cancelScheduledValues(ctx.currentTime);
-    gainNode.gain.setValueAtTime(gainNode.gain.value, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-    oscillator.stop(ctx.currentTime + 0.1);
-  }, []);
+      // If not sustained (one-shot note), schedule release
+      if (!sustained) {
+        const releaseStart = now + attackTime + decayTime + duration;
+        gainNode.gain.setValueAtTime(peakLevel * sustainLevel, releaseStart);
+        gainNode.gain.linearRampToValueAtTime(0.001, releaseStart + adsr.release);
+      }
+
+      oscillator.start(now);
+      if (!sustained) {
+        oscillator.stop(now + attackTime + decayTime + duration + adsr.release);
+      }
+
+      return { oscillator, gainNode, id: Date.now() + Math.random() };
+    },
+    [adsr]
+  );
+
+  // Stop a note with ADSR release
+  const stopNote = useCallback(
+    (oscillator, gainNode) => {
+      const ctx = audioContextRef.current;
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+
+      // Cancel any scheduled changes and start release from current value
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+
+      // Apply ADSR release
+      gainNode.gain.linearRampToValueAtTime(0.001, now + adsr.release);
+      oscillator.stop(now + adsr.release);
+    },
+    [adsr]
+  );
 
   // Release a note (mark it to start fading)
   const releaseNote = useCallback(
@@ -210,7 +239,8 @@ export const useAudioManager = (config, mixer, reverb) => {
       setReleasedNotes((prev) => [...prev, { pitch: pitchClass, time: now, id: noteId }]);
 
       // Mark the pitch class to start fading after a delay
-      const fadeStartDelay = Math.min(500, config.releaseTime * 0.25);
+      // Use ADSR release time for visual fade
+      const fadeStartDelay = Math.min(500, adsr.release * 1000 * 0.25);
 
       setTimeout(() => {
         setActivePitchClasses((prev) => {
@@ -227,7 +257,7 @@ export const useAudioManager = (config, mixer, reverb) => {
         });
       }, fadeStartDelay);
     },
-    [config.releaseTime]
+    [adsr.release]
   );
 
   // Handle note play (click or keyboard)
