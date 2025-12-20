@@ -22,20 +22,20 @@ const UnisonControl = ({ unison, setUnison, className = '' }) => {
         <input
           type="range"
           min="1"
-          max="7"
+          max="16"
           step="1"
           value={unison.voices}
           onChange={(e) => handleChange('voices', parseInt(e.target.value))}
           className="w-full h-2 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-cyan-500"
           style={{
             background: `linear-gradient(to right, #06b6d4 0%, #06b6d4 ${
-              ((unison.voices - 1) / 6) * 100
-            }%, #1f2937 ${((unison.voices - 1) / 6) * 100}%, #1f2937 100%)`,
+              ((unison.voices - 1) / 15) * 100
+            }%, #1f2937 ${((unison.voices - 1) / 15) * 100}%, #1f2937 100%)`,
           }}
         />
         <div className="flex justify-between text-xs text-gray-600 mt-1">
           <span>1</span>
-          <span>7</span>
+          <span>16</span>
         </div>
       </div>
 
@@ -121,10 +121,11 @@ const UnisonControl = ({ unison, setUnison, className = '' }) => {
 
       {/* Visual Voice Indicator */}
       <div className="h-12 bg-gray-900 rounded border border-gray-700 relative overflow-hidden flex items-center justify-center gap-1 p-2">
-        {Array.from({ length: unison.voices }).map((_, i) => {
+        {Array.from({ length: Math.min(unison.voices, 12) }).map((_, i) => {
           const totalVoices = unison.voices;
           const centerIndex = (totalVoices - 1) / 2;
-          const offset = (i - centerIndex) / centerIndex;
+          const actualIndex = totalVoices <= 12 ? i : i * (totalVoices / 12);
+          const offset = (actualIndex - centerIndex) / centerIndex;
           const detuneAmount = offset * unison.detune;
           const pan = offset * unison.spread;
 
@@ -133,12 +134,12 @@ const UnisonControl = ({ unison, setUnison, className = '' }) => {
               key={i}
               className="flex-1 h-full bg-cyan-500 rounded transition-all"
               style={{
-                opacity: i === Math.floor(centerIndex) ? 1 : 0.3 + unison.blend * 0.7,
+                opacity: actualIndex === Math.floor(centerIndex) ? 1 : 0.3 + unison.blend * 0.7,
                 transform: `translateX(${pan * 20}px)`,
               }}
-              title={`Voice ${i + 1}: ${detuneAmount > 0 ? '+' : ''}${detuneAmount.toFixed(
-                1
-              )} cents, Pan: ${(pan * 100).toFixed(0)}%`}
+              title={`Voice ${Math.floor(actualIndex) + 1}: ${
+                detuneAmount > 0 ? '+' : ''
+              }${detuneAmount.toFixed(1)} cents, Pan: ${(pan * 100).toFixed(0)}%`}
             />
           );
         })}
