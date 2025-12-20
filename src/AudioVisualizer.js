@@ -19,11 +19,24 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
     const width = canvas.width;
     const height = canvas.height;
 
-    analyserNode.fftSize = 16384;
-    analyserNode.smoothingTimeConstant = 0.8;
-    const bufferLength = analyserNode.frequencyBinCount;
-    const timeDataArray = new Uint8Array(bufferLength);
-    const freqDataArray = new Uint8Array(bufferLength);
+    // Create separate analysers for optimal performance
+    const scopeAnalyser = audioContext.createAnalyser();
+    const fftAnalyser = audioContext.createAnalyser();
+
+    scopeAnalyser.fftSize = 2048; // Fast for time-domain
+    scopeAnalyser.smoothingTimeConstant = 0.8;
+
+    fftAnalyser.fftSize = 16384; // High resolution for frequency
+    fftAnalyser.smoothingTimeConstant = 0.8;
+
+    // Connect both to the same source
+    analyserNode.connect(scopeAnalyser);
+    analyserNode.connect(fftAnalyser);
+
+    const scopeBufferLength = scopeAnalyser.frequencyBinCount;
+    const fftBufferLength = fftAnalyser.frequencyBinCount;
+    const timeDataArray = new Uint8Array(scopeBufferLength);
+    const freqDataArray = new Uint8Array(fftBufferLength);
     const sampleRate = audioContext.sampleRate;
 
     if (peaksRef.current.length !== width) {
@@ -33,7 +46,9 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
     const findStableTrigger = (data) => {
       const threshold = 128;
       const hysteresis = 10;
-      for (let i = 100; i < data.length - 100; i++) {
+      // Only search first 1000 samples for trigger point
+      const searchEnd = Math.min(1000, data.length - 1);
+      for (let i = 1; i < searchEnd; i++) {
         if (data[i] < threshold - hysteresis && data[i + 1] > threshold + hysteresis) {
           if (data[i + 1] - data[i] > 15) return i;
         }
@@ -59,7 +74,7 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
         const isSplit = mode === 'split';
         const activeWidth = isSplit ? width / 2 : width;
 
-        analyserNode.getByteTimeDomainData(timeDataArray);
+        scopeAnalyser.getByteTimeDomainData(timeDataArray);
         const trigger = findStableTrigger(timeDataArray);
 
         // Time Domain Grid & Labels
@@ -96,7 +111,7 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
 
       // --- FFT SECTION ---
       if (mode === 'fft' || mode === 'split') {
-        analyserNode.getByteFrequencyData(freqDataArray);
+        fftAnalyser.getByteFrequencyData(freqDataArray);
         const isSplit = mode === 'split';
         const activeWidth = isSplit ? width / 2 : width;
         const xOffset = isSplit ? width / 2 : 0;
@@ -124,15 +139,15 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
         for (let x = 0; x < activeWidth; x++) {
           const logFreq = logMin + (x / activeWidth) * (logMax - logMin);
           const freq = Math.pow(10, logFreq);
-          const binIndex = (freq / nyquist) * bufferLength;
+          const binIndex = (freq / nyquist) * fftBufferLength;
           const i = Math.floor(binIndex);
           const fraction = binIndex - i;
 
           // Better interpolation with boundary checking
           let val;
-          if (i < bufferLength - 1) {
+          if (i < fftBufferLength - 1) {
             val = freqDataArray[i] * (1 - fraction) + freqDataArray[i + 1] * fraction;
-          } else if (i < bufferLength) {
+          } else if (i < fftBufferLength) {
             val = freqDataArray[i];
           } else {
             val = 0;
@@ -196,7 +211,11 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
     };
 
     draw(0);
-    return () => cancelAnimationFrame(animationRef.current);
+    return () => {
+      cancelAnimationFrame(animationRef.current);
+      scopeAnalyser.disconnect();
+      fftAnalyser.disconnect();
+    };
   }, [analyserNode, audioContext, mode]);
 
   return (
