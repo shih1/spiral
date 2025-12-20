@@ -12,6 +12,7 @@ import PerformanceMonitor from './PerformanceMonitor';
 import KeyboardVisualizer from './KeyboardVisualizer';
 import AudioVisualizer from './AudioVisualizer';
 import ADSREnvelope from './ADSREnvelope';
+import WaveformSelector from './WaveformSelector';
 
 function App() {
   // UI State
@@ -37,6 +38,7 @@ function App() {
 
   const [mixer, setMixer] = useState({ masterVolume: 0.7, muted: false });
   const [reverb, setReverb] = useState({ enabled: true, wet: 0.3, decay: 2.0 });
+  const [waveform, setWaveform] = useState('sine');
 
   // ADSR State
   const [adsr, setAdsr] = useState({
@@ -62,7 +64,7 @@ function App() {
     releaseNote,
     analyser,
     audioContext,
-  } = useAudioManager(config, mixer, reverb, adsr);
+  } = useAudioManager(config, mixer, reverb, adsr, waveform);
 
   useKeyboardControls({
     enabled: keyboardEnabled,
@@ -151,7 +153,10 @@ function App() {
       {/* 3.5 ADSR Panel */}
       {showADSR && (
         <div className="p-4 flex justify-center bg-gray-900/50 border-b border-gray-700">
-          <ADSREnvelope adsr={adsr} setAdsr={setAdsr} />
+          <div className="flex gap-6 items-start">
+            <ADSREnvelope adsr={adsr} setAdsr={setAdsr} />
+            <WaveformSelector waveform={waveform} setWaveform={setWaveform} />
+          </div>
         </div>
       )}
 

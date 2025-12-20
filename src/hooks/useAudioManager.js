@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-export const useAudioManager = (config, mixer, reverb, adsr) => {
+export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
   const [activeNote, setActiveNote] = useState(null);
   const [activePitchClasses, setActivePitchClasses] = useState([]);
   const [heldNotes, setHeldNotes] = useState([]);
@@ -160,7 +160,7 @@ export const useAudioManager = (config, mixer, reverb, adsr) => {
     };
   }, [config.releaseTime]);
 
-  // Play a note with ADSR envelope
+  // Play a note with ADSR envelope and selected waveform
   const playNote = useCallback(
     (freq, duration = 0.5, sustained = false) => {
       const ctx = audioContextRef.current;
@@ -176,7 +176,7 @@ export const useAudioManager = (config, mixer, reverb, adsr) => {
       gainNode.connect(reverbGainRef.current);
 
       oscillator.frequency.value = freq;
-      oscillator.type = 'sine';
+      oscillator.type = waveform; // Use the selected waveform
 
       const now = ctx.currentTime;
       const attackTime = adsr.attack;
@@ -208,7 +208,7 @@ export const useAudioManager = (config, mixer, reverb, adsr) => {
 
       return { oscillator, gainNode, id: Date.now() + Math.random() };
     },
-    [adsr]
+    [adsr, waveform]
   );
 
   // Stop a note with ADSR release
