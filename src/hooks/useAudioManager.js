@@ -1,6 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter, filterEnv) => {
+export const useAudioManager = (
+  config,
+  mixer,
+  reverb,
+  adsr,
+  waveform,
+  filter,
+  filterEnv,
+  unison
+) => {
   const [activeNote, setActiveNote] = useState(null);
   const [activePitchClasses, setActivePitchClasses] = useState([]);
   const [heldNotes, setHeldNotes] = useState([]);
@@ -275,118 +284,163 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter, f
     };
   }, [config.releaseTime]);
 
-  // Play a note with ADSR envelope, morphed waveform, filter, and filter envelope
+  // Play a note with ADSR envelope, morphed waveform, filter, filter envelope, and unison
   const playNote = useCallback(
     (freq, duration = 0.5, sustained = false) => {
       const ctx = audioContextRef.current;
       if (!ctx || !dryGainRef.current || !reverbGainRef.current) return null;
 
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      const filterNode = ctx.createBiquadFilter();
+      const voices = [];
+      const numVoices = unison.voices;
+      const id = Date.now() + Math.random();
 
-      // Setup filter base frequency
-      const baseFreq = filter.frequency;
-      filterNode.type = filter.type;
-      filterNode.Q.value = filter.Q;
-      if (filterNode.gain) {
-        filterNode.gain.value = filter.gain;
-      }
-
-      // Audio chain with filter bypass handling
-      oscillator.connect(filterNode);
-
-      if (filter.enabled) {
-        filterNode.connect(gainNode);
-      } else {
-        // When filter is bypassed, connect oscillator directly to gain
-        oscillator.disconnect();
-        oscillator.connect(gainNode);
-      }
-
-      // Split signal to both dry and wet (reverb) paths
-      gainNode.connect(dryGainRef.current);
-      gainNode.connect(reverbGainRef.current);
-
-      oscillator.frequency.value = freq;
-
-      // Use morphed periodic wave
-      const periodicWave = createMorphedWave(waveform);
-      if (periodicWave) {
-        oscillator.setPeriodicWave(periodicWave);
-      }
+      // Create a master gain for this note (controls all voices together)
+      const masterNoteGain = ctx.createGain();
+      masterNoteGain.connect(dryGainRef.current);
+      masterNoteGain.connect(reverbGainRef.current);
 
       const now = ctx.currentTime;
       const attackTime = adsr.attack;
       const decayTime = adsr.decay;
       const sustainLevel = adsr.sustain;
-      const peakLevel = 0.3; // Maximum volume
+      const peakLevel = 0.3 / Math.sqrt(numVoices); // Reduce volume per voice to prevent clipping
 
-      // === AMPLITUDE ADSR ENVELOPE ===
-      gainNode.gain.setValueAtTime(0, now);
-      gainNode.gain.linearRampToValueAtTime(peakLevel, now + attackTime);
-      gainNode.gain.linearRampToValueAtTime(peakLevel * sustainLevel, now + attackTime + decayTime);
+      // === AMPLITUDE ADSR ENVELOPE (applied to master gain) ===
+      masterNoteGain.gain.setValueAtTime(0, now);
+      masterNoteGain.gain.linearRampToValueAtTime(peakLevel, now + attackTime);
+      masterNoteGain.gain.linearRampToValueAtTime(
+        peakLevel * sustainLevel,
+        now + attackTime + decayTime
+      );
 
-      // === FILTER ENVELOPE (modulates frequency) ===
-      if (filter.enabled && filterEnv.amount !== 0) {
-        const envAttack = filterEnv.attack;
-        const envDecay = filterEnv.decay;
-        const envSustain = filterEnv.sustain;
-        const envAmount = filterEnv.amount;
+      // Create multiple voices with detune and stereo spread
+      for (let i = 0; i < numVoices; i++) {
+        const oscillator = ctx.createOscillator();
+        const voiceGain = ctx.createGain();
+        const filterNode = ctx.createBiquadFilter();
+        const panner = ctx.createStereoPanner();
 
-        // Calculate target frequencies
-        const startFreq = Math.max(20, Math.min(20000, baseFreq));
-        const peakFreq = Math.max(20, Math.min(20000, baseFreq + envAmount));
-        const sustainFreq = Math.max(20, Math.min(20000, baseFreq + envAmount * envSustain));
+        // Calculate detune amount for this voice
+        const centerIndex = (numVoices - 1) / 2;
+        const offset = (i - centerIndex) / (numVoices > 1 ? centerIndex : 1);
+        const detuneAmount = offset * unison.detune; // in cents
+        const panAmount = offset * unison.spread; // -1 to 1
 
-        // Apply filter envelope
-        filterNode.frequency.setValueAtTime(startFreq, now);
-        filterNode.frequency.exponentialRampToValueAtTime(peakFreq, now + envAttack);
-        filterNode.frequency.exponentialRampToValueAtTime(sustainFreq, now + envAttack + envDecay);
+        // Apply detune
+        oscillator.detune.value = detuneAmount;
 
-        if (!sustained) {
-          const releaseStart = now + attackTime + decayTime + duration;
-          filterNode.frequency.setValueAtTime(sustainFreq, releaseStart);
-          filterNode.frequency.exponentialRampToValueAtTime(
-            Math.max(20, startFreq),
-            releaseStart + filterEnv.release
-          );
+        // Calculate voice blend (center voice is always full, others blend in)
+        const isCenter = i === Math.floor(centerIndex);
+        const voiceLevel = isCenter ? 1.0 : unison.blend;
+        voiceGain.gain.value = voiceLevel;
+
+        // Setup filter
+        const baseFreq = filter.frequency;
+        filterNode.type = filter.type;
+        filterNode.Q.value = filter.Q;
+        if (filterNode.gain) {
+          filterNode.gain.value = filter.gain;
         }
-      } else {
-        // No envelope - just use base frequency
-        filterNode.frequency.setValueAtTime(baseFreq, now);
+
+        // Setup panning
+        panner.pan.value = panAmount;
+
+        // Audio chain: oscillator -> filter -> voiceGain -> panner -> masterNoteGain
+        oscillator.connect(filterNode);
+
+        if (filter.enabled) {
+          filterNode.connect(voiceGain);
+        } else {
+          oscillator.disconnect();
+          oscillator.connect(voiceGain);
+        }
+
+        voiceGain.connect(panner);
+        panner.connect(masterNoteGain);
+
+        oscillator.frequency.value = freq;
+
+        // Use morphed periodic wave
+        const periodicWave = createMorphedWave(waveform);
+        if (periodicWave) {
+          oscillator.setPeriodicWave(periodicWave);
+        }
+
+        // === FILTER ENVELOPE (modulates frequency) ===
+        if (filter.enabled && filterEnv.amount !== 0) {
+          const envAttack = filterEnv.attack;
+          const envDecay = filterEnv.decay;
+          const envSustain = filterEnv.sustain;
+          const envAmount = filterEnv.amount;
+
+          // Calculate target frequencies
+          const startFreq = Math.max(20, Math.min(20000, baseFreq));
+          const peakFreq = Math.max(20, Math.min(20000, baseFreq + envAmount));
+          const sustainFreq = Math.max(20, Math.min(20000, baseFreq + envAmount * envSustain));
+
+          // Apply filter envelope
+          filterNode.frequency.setValueAtTime(startFreq, now);
+          filterNode.frequency.exponentialRampToValueAtTime(peakFreq, now + envAttack);
+          filterNode.frequency.exponentialRampToValueAtTime(
+            sustainFreq,
+            now + envAttack + envDecay
+          );
+
+          if (!sustained) {
+            const releaseStart = now + attackTime + decayTime + duration;
+            filterNode.frequency.setValueAtTime(sustainFreq, releaseStart);
+            filterNode.frequency.exponentialRampToValueAtTime(
+              Math.max(20, startFreq),
+              releaseStart + filterEnv.release
+            );
+          }
+        } else {
+          // No envelope - just use base frequency
+          filterNode.frequency.setValueAtTime(baseFreq, now);
+        }
+
+        oscillator.start(now);
+
+        voices.push({ oscillator, filterNode, voiceGain, panner });
+
+        // Store for real-time updates
+        activeOscillatorsMapRef.current.set(`${id}_${i}`, oscillator);
+        activeFiltersMapRef.current.set(`${id}_${i}`, filterNode);
       }
 
       // If not sustained (one-shot note), schedule amplitude release
       if (!sustained) {
         const releaseStart = now + attackTime + decayTime + duration;
-        gainNode.gain.setValueAtTime(peakLevel * sustainLevel, releaseStart);
-        gainNode.gain.linearRampToValueAtTime(0.001, releaseStart + adsr.release);
-      }
+        masterNoteGain.gain.setValueAtTime(peakLevel * sustainLevel, releaseStart);
+        masterNoteGain.gain.linearRampToValueAtTime(0.001, releaseStart + adsr.release);
 
-      const id = Date.now() + Math.random();
-
-      oscillator.start(now);
-      if (!sustained) {
         const stopTime = Math.max(
           now + attackTime + decayTime + duration + adsr.release,
           now + filterEnv.attack + filterEnv.decay + duration + filterEnv.release
         );
-        oscillator.stop(stopTime);
+
+        voices.forEach(({ oscillator }, i) => {
+          oscillator.stop(stopTime);
+        });
+
         // Remove from active maps when done
         setTimeout(() => {
-          activeOscillatorsMapRef.current.delete(id);
-          activeFiltersMapRef.current.delete(id);
+          voices.forEach((_, i) => {
+            activeOscillatorsMapRef.current.delete(`${id}_${i}`);
+            activeFiltersMapRef.current.delete(`${id}_${i}`);
+          });
         }, (stopTime - now) * 1000);
       }
 
-      // Store oscillator and filter for real-time updates
-      activeOscillatorsMapRef.current.set(id, oscillator);
-      activeFiltersMapRef.current.set(id, filterNode);
-
-      return { oscillator, gainNode, filterNode, id };
+      return {
+        oscillator: voices[0].oscillator, // Return first voice for compatibility
+        gainNode: masterNoteGain,
+        filterNode: voices[0].filterNode,
+        voices,
+        id,
+      };
     },
-    [adsr, waveform, filter, filterEnv, createMorphedWave]
+    [adsr, waveform, filter, filterEnv, unison, createMorphedWave]
   );
 
   // Stop a note with ADSR release

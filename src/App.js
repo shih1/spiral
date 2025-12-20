@@ -15,6 +15,7 @@ import ADSREnvelope from './ADSREnvelope';
 import WaveformSelector from './WaveformSelector';
 import FilterBank from './FilterBank';
 import FilterEnvelope from './FilterEnvelope';
+import UnisonControl from './UnisonControl';
 
 function App() {
   // UI State
@@ -66,6 +67,14 @@ function App() {
     release: 0.5,
   });
 
+  // Unison State
+  const [unison, setUnison] = useState({
+    voices: 1,
+    detune: 10,
+    spread: 0.5,
+    blend: 1.0,
+  });
+
   const presets = { '12-TET': 12, '19-TET': 19, '24-TET': 24, '31-TET': 31, '53-TET': 53 };
 
   // Logic Hooks
@@ -82,7 +91,7 @@ function App() {
     releaseNote,
     analyser,
     audioContext,
-  } = useAudioManager(config, mixer, reverb, adsr, waveform, filter, filterEnv);
+  } = useAudioManager(config, mixer, reverb, adsr, waveform, filter, filterEnv, unison);
 
   useKeyboardControls({
     enabled: keyboardEnabled,
@@ -176,6 +185,7 @@ function App() {
             <WaveformSelector waveform={waveform} setWaveform={setWaveform} />
             <FilterBank filter={filter} setFilter={setFilter} />
             <FilterEnvelope filterEnv={filterEnv} setFilterEnv={setFilterEnv} />
+            <UnisonControl unison={unison} setUnison={setUnison} />
           </div>
         </div>
       )}
