@@ -13,6 +13,7 @@ import KeyboardVisualizer from './KeyboardVisualizer';
 import AudioVisualizer from './AudioVisualizer';
 import ADSREnvelope from './ADSREnvelope';
 import WaveformSelector from './WaveformSelector';
+import FilterBank from './FilterBank';
 
 function App() {
   // UI State
@@ -39,6 +40,13 @@ function App() {
   const [mixer, setMixer] = useState({ masterVolume: 0.7, muted: false });
   const [reverb, setReverb] = useState({ enabled: true, wet: 0.3, decay: 2.0 });
   const [waveform, setWaveform] = useState(0); // 0-1 position value for morphing
+  const [filter, setFilter] = useState({
+    enabled: true,
+    type: 'lowpass',
+    frequency: 2000,
+    Q: 1,
+    gain: 0,
+  });
 
   // ADSR State
   const [adsr, setAdsr] = useState({
@@ -64,7 +72,7 @@ function App() {
     releaseNote,
     analyser,
     audioContext,
-  } = useAudioManager(config, mixer, reverb, adsr, waveform);
+  } = useAudioManager(config, mixer, reverb, adsr, waveform, filter);
 
   useKeyboardControls({
     enabled: keyboardEnabled,
@@ -114,7 +122,7 @@ function App() {
             </span>
           </button>
 
-          {/* ADSR Toggle Button */}
+          {/* Synth Controls Toggle Button */}
           <button
             onClick={() => setShowADSR(!showADSR)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white border transition-all shadow-inner ${
@@ -124,7 +132,7 @@ function App() {
             }`}
           >
             <Sliders size={18} />
-            <span className="text-sm font-medium">ADSR</span>
+            <span className="text-sm font-medium">Synth Controls</span>
           </button>
 
           <label className="flex items-center text-white text-sm cursor-pointer hover:text-blue-300 transition-colors">
@@ -150,12 +158,13 @@ function App() {
       {showSettings && <SettingsPanel config={config} setConfig={setConfig} presets={presets} />}
       <MixerPanel mixer={mixer} setMixer={setMixer} reverb={reverb} setReverb={setReverb} />
 
-      {/* 3.5 ADSR Panel */}
+      {/* 3.5 Synth Controls Panel (ADSR, Waveform, Filter) */}
       {showADSR && (
         <div className="p-4 flex justify-center bg-gray-900/50 border-b border-gray-700">
-          <div className="flex gap-6 items-start">
+          <div className="flex gap-6 items-start flex-wrap justify-center">
             <ADSREnvelope adsr={adsr} setAdsr={setAdsr} />
             <WaveformSelector waveform={waveform} setWaveform={setWaveform} />
+            <FilterBank filter={filter} setFilter={setFilter} />
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
+export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter) => {
   const [activeNote, setActiveNote] = useState(null);
   const [activePitchClasses, setActivePitchClasses] = useState([]);
   const [heldNotes, setHeldNotes] = useState([]);
@@ -15,6 +15,7 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
   const activeOscillatorsMapRef = useRef(new Map()); // Track active oscillators for real-time updates
+  const activeFiltersMapRef = useRef(new Map()); // Track active filters for real-time updates
 
   // Initialize Audio Context with Master Gain and Reverb
   useEffect(() => {
@@ -193,6 +194,46 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
     });
   }, [waveform, createMorphedWave]);
 
+  // Update all active filters when filter settings change
+  useEffect(() => {
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+
+    activeFiltersMapRef.current.forEach((filterNode) => {
+      try {
+        filterNode.type = filter.type;
+        // Use exponentialRampToValueAtTime for smoother frequency changes
+        filterNode.frequency.cancelScheduledValues(now);
+        filterNode.frequency.setValueAtTime(filterNode.frequency.value, now);
+        filterNode.frequency.exponentialRampToValueAtTime(
+          Math.max(20, filter.frequency),
+          now + 0.02
+        );
+
+        filterNode.Q.cancelScheduledValues(now);
+        filterNode.Q.setValueAtTime(filterNode.Q.value, now);
+        filterNode.Q.linearRampToValueAtTime(filter.Q, now + 0.02);
+
+        if (filterNode.gain) {
+          filterNode.gain.cancelScheduledValues(now);
+          filterNode.gain.setValueAtTime(filterNode.gain.value, now);
+          filterNode.gain.linearRampToValueAtTime(filter.gain, now + 0.02);
+        }
+      } catch (e) {
+        // Filter might have been disconnected
+      }
+    });
+  }, [filter.type, filter.frequency, filter.Q, filter.gain]);
+
+  // Handle filter enable/disable separately by reconnecting the audio graph
+  useEffect(() => {
+    // Note: This is a limitation - we can't easily reconnect active nodes
+    // The filter enable/disable will only affect new notes
+    // For real-time bypass, we'd need to use gain nodes instead
+  }, [filter.enabled]);
+
   // Continuous animation loop for fading - ALWAYS RUNNING
   useEffect(() => {
     const animate = () => {
@@ -234,7 +275,7 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
     };
   }, [config.releaseTime]);
 
-  // Play a note with ADSR envelope and morphed waveform
+  // Play a note with ADSR envelope, morphed waveform, and filter
   const playNote = useCallback(
     (freq, duration = 0.5, sustained = false) => {
       const ctx = audioContextRef.current;
@@ -242,8 +283,26 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
 
       const oscillator = ctx.createOscillator();
       const gainNode = ctx.createGain();
+      const filterNode = ctx.createBiquadFilter();
 
-      oscillator.connect(gainNode);
+      // Setup filter
+      filterNode.type = filter.type;
+      filterNode.frequency.value = filter.frequency;
+      filterNode.Q.value = filter.Q;
+      if (filterNode.gain) {
+        filterNode.gain.value = filter.gain;
+      }
+
+      // Audio chain with filter bypass handling
+      oscillator.connect(filterNode);
+
+      if (filter.enabled) {
+        filterNode.connect(gainNode);
+      } else {
+        // When filter is bypassed, connect oscillator directly to gain
+        oscillator.disconnect();
+        oscillator.connect(gainNode);
+      }
 
       // Split signal to both dry and wet (reverb) paths
       gainNode.connect(dryGainRef.current);
@@ -285,18 +344,20 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
       oscillator.start(now);
       if (!sustained) {
         oscillator.stop(now + attackTime + decayTime + duration + adsr.release);
-        // Remove from active oscillators when done
+        // Remove from active maps when done
         setTimeout(() => {
           activeOscillatorsMapRef.current.delete(id);
+          activeFiltersMapRef.current.delete(id);
         }, (attackTime + decayTime + duration + adsr.release) * 1000);
       }
 
-      // Store oscillator for real-time waveform updates
+      // Store oscillator and filter for real-time updates
       activeOscillatorsMapRef.current.set(id, oscillator);
+      activeFiltersMapRef.current.set(id, filterNode);
 
-      return { oscillator, gainNode, id };
+      return { oscillator, gainNode, filterNode, id };
     },
-    [adsr, waveform, createMorphedWave]
+    [adsr, waveform, filter, createMorphedWave]
   );
 
   // Stop a note with ADSR release
@@ -315,11 +376,12 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform) => {
       gainNode.gain.linearRampToValueAtTime(0.001, now + adsr.release);
       oscillator.stop(now + adsr.release);
 
-      // Remove from active oscillators map
+      // Remove from active maps
       setTimeout(() => {
         activeOscillatorsMapRef.current.forEach((osc, key) => {
           if (osc === oscillator) {
             activeOscillatorsMapRef.current.delete(key);
+            activeFiltersMapRef.current.delete(key);
           }
         });
       }, adsr.release * 1000);
