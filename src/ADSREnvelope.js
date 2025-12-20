@@ -232,6 +232,12 @@ export default function ADSREnvelope({ adsr, setAdsr }) {
     Pluck: { attack: 0.005, decay: 0.1, sustain: 0.2, release: 0.1 },
     Pad: { attack: 1.5, decay: 1.0, sustain: 0.6, release: 2.0 },
     Long: { attack: 2.0, decay: 1.5, sustain: 0.4, release: 3.5 },
+    Piano: { attack: 0.01, decay: 0.3, sustain: 0.5, release: 0.4 },
+    Organ: { attack: 0.01, decay: 0.05, sustain: 1.0, release: 0.2 },
+    Brass: { attack: 0.2, decay: 0.4, sustain: 0.8, release: 0.5 },
+    Strings: { attack: 0.8, decay: 0.6, sustain: 0.7, release: 1.2 },
+    Bell: { attack: 0.01, decay: 0.8, sustain: 0.1, release: 1.5 },
+    Sweep: { attack: 2.5, decay: 0.5, sustain: 0.3, release: 2.0 },
   };
 
   return (
