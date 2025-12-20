@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter) => {
+export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter, filterEnv) => {
   const [activeNote, setActiveNote] = useState(null);
   const [activePitchClasses, setActivePitchClasses] = useState([]);
   const [heldNotes, setHeldNotes] = useState([]);
@@ -275,7 +275,7 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter) =
     };
   }, [config.releaseTime]);
 
-  // Play a note with ADSR envelope, morphed waveform, and filter
+  // Play a note with ADSR envelope, morphed waveform, filter, and filter envelope
   const playNote = useCallback(
     (freq, duration = 0.5, sustained = false) => {
       const ctx = audioContextRef.current;
@@ -285,9 +285,9 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter) =
       const gainNode = ctx.createGain();
       const filterNode = ctx.createBiquadFilter();
 
-      // Setup filter
+      // Setup filter base frequency
+      const baseFreq = filter.frequency;
       filterNode.type = filter.type;
-      filterNode.frequency.value = filter.frequency;
       filterNode.Q.value = filter.Q;
       if (filterNode.gain) {
         filterNode.gain.value = filter.gain;
@@ -322,17 +322,42 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter) =
       const sustainLevel = adsr.sustain;
       const peakLevel = 0.3; // Maximum volume
 
-      // ADSR Envelope
-      // Start at 0
+      // === AMPLITUDE ADSR ENVELOPE ===
       gainNode.gain.setValueAtTime(0, now);
-
-      // Attack: ramp up to peak
       gainNode.gain.linearRampToValueAtTime(peakLevel, now + attackTime);
-
-      // Decay: ramp down to sustain level
       gainNode.gain.linearRampToValueAtTime(peakLevel * sustainLevel, now + attackTime + decayTime);
 
-      // If not sustained (one-shot note), schedule release
+      // === FILTER ENVELOPE (modulates frequency) ===
+      if (filter.enabled && filterEnv.amount !== 0) {
+        const envAttack = filterEnv.attack;
+        const envDecay = filterEnv.decay;
+        const envSustain = filterEnv.sustain;
+        const envAmount = filterEnv.amount;
+
+        // Calculate target frequencies
+        const startFreq = Math.max(20, Math.min(20000, baseFreq));
+        const peakFreq = Math.max(20, Math.min(20000, baseFreq + envAmount));
+        const sustainFreq = Math.max(20, Math.min(20000, baseFreq + envAmount * envSustain));
+
+        // Apply filter envelope
+        filterNode.frequency.setValueAtTime(startFreq, now);
+        filterNode.frequency.exponentialRampToValueAtTime(peakFreq, now + envAttack);
+        filterNode.frequency.exponentialRampToValueAtTime(sustainFreq, now + envAttack + envDecay);
+
+        if (!sustained) {
+          const releaseStart = now + attackTime + decayTime + duration;
+          filterNode.frequency.setValueAtTime(sustainFreq, releaseStart);
+          filterNode.frequency.exponentialRampToValueAtTime(
+            Math.max(20, startFreq),
+            releaseStart + filterEnv.release
+          );
+        }
+      } else {
+        // No envelope - just use base frequency
+        filterNode.frequency.setValueAtTime(baseFreq, now);
+      }
+
+      // If not sustained (one-shot note), schedule amplitude release
       if (!sustained) {
         const releaseStart = now + attackTime + decayTime + duration;
         gainNode.gain.setValueAtTime(peakLevel * sustainLevel, releaseStart);
@@ -343,12 +368,16 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter) =
 
       oscillator.start(now);
       if (!sustained) {
-        oscillator.stop(now + attackTime + decayTime + duration + adsr.release);
+        const stopTime = Math.max(
+          now + attackTime + decayTime + duration + adsr.release,
+          now + filterEnv.attack + filterEnv.decay + duration + filterEnv.release
+        );
+        oscillator.stop(stopTime);
         // Remove from active maps when done
         setTimeout(() => {
           activeOscillatorsMapRef.current.delete(id);
           activeFiltersMapRef.current.delete(id);
-        }, (attackTime + decayTime + duration + adsr.release) * 1000);
+        }, (stopTime - now) * 1000);
       }
 
       // Store oscillator and filter for real-time updates
@@ -357,7 +386,7 @@ export const useAudioManager = (config, mixer, reverb, adsr, waveform, filter) =
 
       return { oscillator, gainNode, filterNode, id };
     },
-    [adsr, waveform, filter, createMorphedWave]
+    [adsr, waveform, filter, filterEnv, createMorphedWave]
   );
 
   // Stop a note with ADSR release

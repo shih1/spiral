@@ -14,6 +14,7 @@ import AudioVisualizer from './AudioVisualizer';
 import ADSREnvelope from './ADSREnvelope';
 import WaveformSelector from './WaveformSelector';
 import FilterBank from './FilterBank';
+import FilterEnvelope from './FilterEnvelope';
 
 function App() {
   // UI State
@@ -56,6 +57,15 @@ function App() {
     release: 0.5,
   });
 
+  // Filter Envelope State
+  const [filterEnv, setFilterEnv] = useState({
+    amount: 2000,
+    attack: 0.01,
+    decay: 0.3,
+    sustain: 0.3,
+    release: 0.5,
+  });
+
   const presets = { '12-TET': 12, '19-TET': 19, '24-TET': 24, '31-TET': 31, '53-TET': 53 };
 
   // Logic Hooks
@@ -72,7 +82,7 @@ function App() {
     releaseNote,
     analyser,
     audioContext,
-  } = useAudioManager(config, mixer, reverb, adsr, waveform, filter);
+  } = useAudioManager(config, mixer, reverb, adsr, waveform, filter, filterEnv);
 
   useKeyboardControls({
     enabled: keyboardEnabled,
@@ -165,6 +175,7 @@ function App() {
             <ADSREnvelope adsr={adsr} setAdsr={setAdsr} />
             <WaveformSelector waveform={waveform} setWaveform={setWaveform} />
             <FilterBank filter={filter} setFilter={setFilter} />
+            <FilterEnvelope filterEnv={filterEnv} setFilterEnv={setFilterEnv} />
           </div>
         </div>
       )}
