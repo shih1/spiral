@@ -36,9 +36,13 @@ const CHORD_LIBRARY = {
   '7#11': [0, 4, 7, 10, 18],
 };
 
-// Convert the library to Octave Ratios (0.0 to 1.0) for N-TET compatibility
+// FIXED: Use Pitch Class Sets to distinguish between Sus2 [0, 2, 7] and 9th [0, 2, 4, 7, 10]
 const NORM_CHORD_LIBRARY = Object.entries(CHORD_LIBRARY).reduce((acc, [name, pattern]) => {
-  acc[name] = pattern.map((p) => (p % 12) / 12);
+  // 1. Convert to Pitch Classes (0-11)
+  // 2. Filter unique values (e.g., 2 and 14 both become 2)
+  // 3. Sort ascending so we can compare arrays directly
+  const pcSet = [...new Set(pattern.map((p) => p % 12))].sort((a, b) => a - b);
+  acc[name] = pcSet.map((p) => p / 12);
   return acc;
 }, {});
 
@@ -46,7 +50,6 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
   const canvasRef = useRef(null);
   const staticLayerRef = useRef(null);
   const animationFrameRef = useRef(null);
-
   const glowStatesRef = useRef({});
 
   const { divisions } = config;
@@ -76,39 +79,34 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     size: 5 + coords.z * 2,
   });
 
-  // EXACT MATCHING LOGIC FOR N-TET
   const immediateChord = useMemo(() => {
     if (heldNotes.length < 2) return null;
 
-    // 1. Normalize held notes to unique pitch classes within the current scale divisions
+    // Normalize held notes to unique pitch classes within current divisions
     const uniquePC = Array.from(new Set(heldNotes.map((n) => n.pitch % divisions))).sort(
       (a, b) => a - b
     );
 
-    // 2. Iterate through each held note as a potential root
     for (let i = 0; i < uniquePC.length; i++) {
       const root = uniquePC[i];
-
-      // Calculate relative intervals (steps) from current root
       const currentSteps = uniquePC
         .map((p) => (p - root + divisions) % divisions)
         .sort((a, b) => a - b);
 
-      // 3. Compare with Normalized Library
       for (const [name, ratios] of Object.entries(NORM_CHORD_LIBRARY)) {
         if (ratios.length !== currentSteps.length) continue;
 
-        // Check if every interval ratio maps to an EXACT whole-number step in current divisions
-        const isExactMatch = ratios.every((ratio, index) => {
-          const expectedStep = ratio * divisions;
-          const roundedStep = Math.round(expectedStep);
+        const isMatch = ratios.every((ratio, index) => {
+          // Find the theoretical step for this ratio in the current scale
+          const targetStep = ratio * divisions;
+          // In N-TET, we look for the nearest integer step
+          const closestStep = Math.round(targetStep);
 
-          // Use a small epsilon for floating point safety
-          const isScaleAligned = Math.abs(expectedStep - roundedStep) < 0.001;
-          return isScaleAligned && roundedStep === currentSteps[index];
+          // Even if divisions is 12, we check if current held step matches the closest library step
+          return closestStep === currentSteps[index];
         });
 
-        if (isExactMatch) return name;
+        if (isMatch) return name;
       }
     }
     return null;
@@ -131,6 +129,7 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
     for (let i = sorted.length - 1; i >= 0; i--) {
       const p = sorted[i];
       while (
+        upper.length >= 2 &&
         upper.length >= 2 &&
         crossProduct(upper[upper.length - 2], upper[upper.length - 1], p) <= 0
       )
@@ -252,7 +251,7 @@ const PitchClassVisualizer = ({ config, heldNotes }) => {
 
     render();
     return () => cancelAnimationFrame(animationFrameRef.current);
-  }, [heldNotes, immediateChord, divisions]);
+  }, [heldNotes, immediateChord, divisions, getCoordinates]);
 
   return (
     <canvas
