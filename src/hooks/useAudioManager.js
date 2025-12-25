@@ -223,23 +223,26 @@ export const useAudioManager = (
 
     return ctx.createPeriodicWave(real, imag, { disableNormalization: false });
   }, []);
+
   const makeDistortionCurve = (amount) => {
     const n_samples = 44100;
     const curve = new Float32Array(n_samples);
 
-    // This is mathematically transparent but keeps the node "hot"
-    if (amount <= 0) {
-      for (let i = 0; i < n_samples; i++) {
-        curve[i] = (i * 2) / n_samples - 1;
-      }
-      return curve;
-    }
+    // Ensure amount is a valid number to prevent NaN silence
+    const k = typeof amount !== 'number' || amount <= 0 ? 0 : amount;
 
-    // The distortion math for when drive is > 0
-    const k = amount * 0.8;
     for (let i = 0; i < n_samples; ++i) {
+      // Standardize x from -1 to 1
       const x = (i * 2) / n_samples - 1;
-      curve[i] = ((3 + k) * x * 20 * (Math.PI / 180)) / (Math.PI + k * Math.abs(x));
+
+      if (k === 0) {
+        // Linear identity curve (No distortion, full volume)
+        curve[i] = x;
+      } else {
+        // Classic Soft-Clipping formula
+        // This maintains volume while adding harmonics/saturation
+        curve[i] = ((3 + k) * x * Math.PI) / (Math.PI + k * Math.abs(x));
+      }
     }
     return curve;
   };
@@ -437,13 +440,13 @@ export const useAudioManager = (
           filterNode.gain.value = filter.gain;
         }
 
+        // Update routing to ensure no "dead ends"
         if (filter.enabled) {
-          // Path: Osc -> Filter -> Drive -> Gain
           oscillator.connect(filterNode);
           filterNode.connect(driveNode);
           driveNode.connect(voiceGain);
         } else {
-          // Path: Osc -> Gain (Bypasses both Filter AND Drive)
+          // If filter is off, we skip filter AND drive to be safe
           oscillator.connect(voiceGain);
         }
 

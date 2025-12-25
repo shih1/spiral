@@ -204,3 +204,4 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
 };
 
 export default FilterBank;
+
