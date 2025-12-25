@@ -24,6 +24,7 @@ export const useAudioManager = (
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
   const activeFiltersMapRef = useRef(new Map()); // Track active filters for real-time updates
+  const activeDriveMapRef = useRef(new Map()); // ADD THIS LINE
 
   // Initialize Audio Context with Master Gain and Reverb
   useEffect(() => {
@@ -222,6 +223,26 @@ export const useAudioManager = (
 
     return ctx.createPeriodicWave(real, imag, { disableNormalization: false });
   }, []);
+  const makeDistortionCurve = (amount) => {
+    const n_samples = 44100;
+    const curve = new Float32Array(n_samples);
+
+    // This is mathematically transparent but keeps the node "hot"
+    if (amount <= 0) {
+      for (let i = 0; i < n_samples; i++) {
+        curve[i] = (i * 2) / n_samples - 1;
+      }
+      return curve;
+    }
+
+    // The distortion math for when drive is > 0
+    const k = amount * 0.8;
+    for (let i = 0; i < n_samples; ++i) {
+      const x = (i * 2) / n_samples - 1;
+      curve[i] = ((3 + k) * x * 20 * (Math.PI / 180)) / (Math.PI + k * Math.abs(x));
+    }
+    return curve;
+  };
 
   // Update all active oscillators when waveform changes
   useEffect(() => {
@@ -246,8 +267,10 @@ export const useAudioManager = (
   }, [waveform, createMorphedWave]);
 
   // Update all active filters when filter settings change
+
   useEffect(() => {
     const ctx = audioContextRef.current;
+
     if (!ctx) return;
 
     const now = ctx.currentTime;
@@ -255,7 +278,6 @@ export const useAudioManager = (
     activeFiltersMapRef.current.forEach((filterNode) => {
       try {
         filterNode.type = filter.type;
-        // Use exponentialRampToValueAtTime for smoother frequency changes
         filterNode.frequency.cancelScheduledValues(now);
         filterNode.frequency.setValueAtTime(filterNode.frequency.value, now);
         filterNode.frequency.exponentialRampToValueAtTime(
@@ -277,6 +299,28 @@ export const useAudioManager = (
       }
     });
   }, [filter.type, filter.frequency, filter.Q, filter.gain]);
+
+  // Dedicated Effect for live Drive/Saturation updates
+  useEffect(() => {
+    const ctx = audioContextRef.current;
+    if (!ctx || !activeDriveMapRef.current) return;
+
+    // 1. Generate the curve based on the module settings
+    // 0% drive or disabled filter now returns a "linear" curve to prevent clicking
+    const currentCurve = makeDistortionCurve(filter.enabled ? filter.drive : 0);
+
+    // 2. Update every active Drive node instantly
+    activeDriveMapRef.current.forEach((driveNode) => {
+      try {
+        if (driveNode) {
+          // This is the part you were missing:
+          driveNode.curve = currentCurve;
+        }
+      } catch (e) {
+        // Node might have been cleaned up by the stopNote timer
+      }
+    });
+  }, [filter.drive, filter.enabled]);
 
   // Continuous animation loop for fading - ALWAYS RUNNING
   useEffect(() => {
@@ -352,6 +396,8 @@ export const useAudioManager = (
 
       // Create multiple voices with detune and stereo spread
       for (let i = 0; i < numVoices; i++) {
+        const voiceKey = `${id}_voice_${i}`;
+
         const oscillator = ctx.createOscillator();
         const voiceGain = ctx.createGain();
         const filterNode = ctx.createBiquadFilter();
@@ -375,6 +421,11 @@ export const useAudioManager = (
         const voiceLevel = isMiddle ? 1.0 : unison.blend;
         voiceGain.gain.value = voiceLevel;
 
+        // 6. Drive: create drive nodes.
+        const driveNode = ctx.createWaveShaper();
+        driveNode.curve = makeDistortionCurve(filter.enabled ? filter.drive : 0);
+        driveNode.oversample = '4x';
+
         // Add phase randomization to prevent phasing artifacts
         const phaseOffset = Math.random() * Math.PI * 2;
 
@@ -385,16 +436,18 @@ export const useAudioManager = (
         if (filterNode.gain) {
           filterNode.gain.value = filter.gain;
         }
-        // Audio chain: oscillator -> filter -> voiceGain -> panner -> masterNoteGain
-        oscillator.connect(filterNode);
 
         if (filter.enabled) {
-          filterNode.connect(voiceGain);
+          // Path: Osc -> Filter -> Drive -> Gain
+          oscillator.connect(filterNode);
+          filterNode.connect(driveNode);
+          driveNode.connect(voiceGain);
         } else {
-          oscillator.disconnect();
+          // Path: Osc -> Gain (Bypasses both Filter AND Drive)
           oscillator.connect(voiceGain);
         }
 
+        // Standard exit chain
         voiceGain.connect(panner);
         panner.connect(masterNoteGain);
 
@@ -445,7 +498,8 @@ export const useAudioManager = (
         voices.push({ oscillator, filterNode, voiceGain, panner });
 
         // Store filter for real-time updates
-        activeFiltersMapRef.current.set(`${id}_voice_${i}`, filterNode);
+        activeFiltersMapRef.current.set(voiceKey, filterNode);
+        activeDriveMapRef.current.set(voiceKey, driveNode);
       }
 
       const noteData = {
@@ -591,7 +645,9 @@ export const useAudioManager = (
 
           // Clean up filter refs
           noteData.voices.forEach((_, i) => {
-            activeFiltersMapRef.current.delete(`${noteData.id}_voice_${i}`);
+            const voiceKey = `${noteData.id}_voice_${i}`;
+            activeFiltersMapRef.current.delete(voiceKey);
+            activeDriveMapRef.current.delete(voiceKey);
           });
         }, cleanupTime);
       } else {
