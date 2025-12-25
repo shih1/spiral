@@ -9,6 +9,21 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
     { value: 'notch', label: 'NT' },
   ];
 
+  // Helper functions for Logarithmic Conversion
+  const logScale = (value, min, max) => {
+    const minLog = Math.log(min);
+    const maxLog = Math.log(max);
+    const scale = (maxLog - minLog) / 100;
+    return Math.exp(minLog + scale * value);
+  };
+
+  const inverseLogScale = (value, min, max) => {
+    const minLog = Math.log(min);
+    const maxLog = Math.log(max);
+    const scale = (maxLog - minLog) / 100;
+    return (Math.log(value) - minLog) / scale;
+  };
+
   const handleChange = (key, value) => {
     setFilter((prev) => ({ ...prev, [key]: value }));
   };
@@ -17,9 +32,8 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
   const curvePath = useMemo(() => {
     const width = 300;
     const height = 100;
-    // Logarithmic frequency mapping for the X-axis
+    // Logarithmic frequency mapping for the X-axis visual
     const freqX = (Math.log10(filter.frequency / 20) / Math.log10(20000 / 20)) * width;
-    // Scale resonance height based on Q
     const qHeight = Math.min(height * 0.8, (filter.Q / 30) * height * 1.5);
 
     if (filter.type === 'lowpass') {
@@ -35,7 +49,6 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
         50 - qHeight
       } Q ${freqX} 100, ${freqX + 45} 100 L ${width} 100`;
     } else {
-      // Notch
       return `M 0 50 L ${freqX - 25} 50 Q ${freqX} 50, ${freqX} 95 Q ${freqX} 50, ${
         freqX + 25
       } 50 L ${width} 50`;
@@ -95,7 +108,6 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
               strokeLinecap="round"
               className="transition-all duration-300 ease-in-out"
             />
-            {/* The peak indicator node */}
             <circle
               cx={(Math.log10(filter.frequency / 20) / Math.log10(20000 / 20)) * 300}
               cy={50 - (filter.type === 'notch' ? -45 : (filter.Q / 30) * 40)}
@@ -130,7 +142,7 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
           ))}
         </div>
 
-        {/* Frequency Slider */}
+        {/* Frequency Slider (Logarithmic 20Hz - 20kHz) */}
         <div className="space-y-1.5">
           <div className="flex justify-between text-[10px] font-bold uppercase tracking-tighter">
             <span className="text-gray-500">Frequency</span>
@@ -138,16 +150,21 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
           </div>
           <input
             type="range"
-            min="20"
-            max="20000"
-            step="1"
-            value={filter.frequency}
-            onChange={(e) => handleChange('frequency', parseFloat(e.target.value))}
+            min="0"
+            max="100"
+            step="0.1"
+            value={inverseLogScale(filter.frequency, 20, 20000)}
+            onChange={(e) => {
+              const hz = logScale(parseFloat(e.target.value), 20, 20000);
+              handleChange('frequency', hz);
+            }}
             className="w-full h-1.5 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-purple-500"
             style={{
-              background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${
-                ((filter.frequency - 20) / 19980) * 100
-              }%, #111827 ${((filter.frequency - 20) / 19980) * 100}%, #111827 100%)`,
+              background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${inverseLogScale(
+                filter.frequency,
+                20,
+                20000
+              )}%, #111827 ${inverseLogScale(filter.frequency, 20, 20000)}%, #111827 100%)`,
             }}
           />
         </div>
@@ -174,7 +191,7 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
           />
         </div>
 
-        {/* NEW: Drive Slider */}
+        {/* Drive Slider (Logarithmic 1% to 100% curve) */}
         <div className="space-y-1.5 pt-2 border-t border-gray-700/50">
           <div className="flex justify-between text-[10px] font-bold uppercase tracking-tighter">
             <div className="flex items-center gap-1 text-gray-500">
@@ -187,14 +204,20 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
             type="range"
             min="0"
             max="100"
-            step="1"
-            value={filter.drive || 0}
-            onChange={(e) => handleChange('drive', parseInt(e.target.value))}
+            step="0.1"
+            value={filter.drive === 0 ? 0 : inverseLogScale(filter.drive, 1, 100)}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              const scaledDrive = val === 0 ? 0 : logScale(val, 1, 100);
+              handleChange('drive', scaledDrive);
+            }}
             className="w-full h-1.5 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-orange-500"
             style={{
               background: `linear-gradient(to right, #fb923c 0%, #fb923c ${
-                filter.drive || 0
-              }%, #111827 ${filter.drive || 0}%, #111827 100%)`,
+                filter.drive === 0 ? 0 : inverseLogScale(filter.drive, 1, 100)
+              }%, #111827 ${
+                filter.drive === 0 ? 0 : inverseLogScale(filter.drive, 1, 100)
+              }%, #111827 100%)`,
             }}
           />
         </div>
@@ -204,4 +227,3 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
 };
 
 export default FilterBank;
-
