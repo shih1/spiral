@@ -119,30 +119,40 @@ const UnisonControl = ({ unison, setUnison, className = '' }) => {
         </div>
       </div>
 
-      {/* Visual Voice Indicator */}
-      <div className="h-12 bg-gray-900 rounded border border-gray-700 relative overflow-hidden flex items-center justify-center gap-1 p-2">
-        {Array.from({ length: Math.min(unison.voices, 12) }).map((_, i) => {
-          const totalVoices = unison.voices;
-          const centerIndex = (totalVoices - 1) / 2;
-          const actualIndex = totalVoices <= 12 ? i : i * (totalVoices / 12);
-          const offset = (actualIndex - centerIndex) / centerIndex;
-          const detuneAmount = offset * unison.detune;
-          const pan = offset * unison.spread;
+      {/* Visual Voice Indicator - FIXED */}
+      <div className="h-12 bg-gray-900 rounded border border-gray-700 relative overflow-hidden flex items-center justify-center p-2">
+        <div className="flex items-center justify-center gap-1 w-full h-full">
+          {Array.from({ length: Math.min(unison.voices, 16) }).map((_, i) => {
+            const totalVoices = unison.voices;
+            const centerIndex = (totalVoices - 1) / 2;
+            const offset = (i - centerIndex) / Math.max(centerIndex, 1);
+            const detuneAmount = offset * unison.detune;
+            const pan = offset * unison.spread;
+            const isCenter = Math.abs(i - centerIndex) < 0.5;
 
-          return (
-            <div
-              key={i}
-              className="flex-1 h-full bg-cyan-500 rounded transition-all"
-              style={{
-                opacity: actualIndex === Math.floor(centerIndex) ? 1 : 0.3 + unison.blend * 0.7,
-                transform: `translateX(${pan * 20}px)`,
-              }}
-              title={`Voice ${Math.floor(actualIndex) + 1}: ${
-                detuneAmount > 0 ? '+' : ''
-              }${detuneAmount.toFixed(1)} cents, Pan: ${(pan * 100).toFixed(0)}%`}
-            />
-          );
-        })}
+            // Calculate width so bars fit in container
+            const barWidth = Math.min(100 / totalVoices, 8); // Max 8% per bar
+
+            return (
+              <div
+                key={i}
+                className="bg-cyan-500 rounded transition-all h-full"
+                style={{
+                  width: `${barWidth}%`,
+                  minWidth: '2px',
+                  opacity: isCenter ? 1 : 0.3 + unison.blend * 0.7,
+                  transform: `translateX(${pan * 15}px) scaleY(${
+                    isCenter ? 1 : 0.7 + unison.blend * 0.3
+                  })`,
+                  boxShadow: isCenter ? '0 0 8px rgba(6, 182, 212, 0.6)' : 'none',
+                }}
+                title={`Voice ${i + 1}: ${detuneAmount > 0 ? '+' : ''}${detuneAmount.toFixed(
+                  1
+                )} cents, Pan: ${(pan * 100).toFixed(0)}%`}
+              />
+            );
+          })}
+        </div>
       </div>
 
       {/* Info text */}
