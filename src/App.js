@@ -114,6 +114,13 @@ function App() {
         heldNotes={heldNotes}
         releasedNotes={releasedNotes}
         activeOscillators={activeOscillators}
+        // Add these new props:
+        audioContext={audioContext}
+        analyser={analyser}
+        unison={unison}
+        filter={filter}
+        filterEnv={filterEnv}
+        reverb={reverb}
       />
 
       {/* 2. Header / Navigation */}
