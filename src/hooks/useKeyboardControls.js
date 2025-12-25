@@ -83,6 +83,7 @@ export const useKeyboardControls = ({
       const nodes = handleNotePlay(note, true);
 
       if (nodes) {
+        console.log(`⌨️ Key ${e.code} pressed, storing noteData with ID: ${nodes.id}`);
         setActiveOscillators((prev) => ({ ...prev, [e.code]: nodes }));
 
         if (setPressedKeys) {
@@ -96,14 +97,22 @@ export const useKeyboardControls = ({
     };
 
     const handleKeyUp = (e) => {
-      if (activeOscillators[e.code]) {
-        const { oscillator, gainNode, id } = activeOscillators[e.code];
+      const keyData = activeOscillators[e.code];
+
+      if (keyData) {
+        console.log(`⌨️ Key ${e.code} released`);
+
+        // 🔴 CRITICAL FIX: Pass the entire noteData object as the third parameter
+        const { oscillator, gainNode, id } = keyData;
         const keyChar = e.key.toLowerCase();
         const noteIndex = keyboardLayout[keyChar];
 
         if (noteIndex !== undefined) {
           const note = notes[noteIndex];
-          stopNote(oscillator, gainNode);
+
+          console.log(`  Calling stopNote with noteData:`, keyData);
+          // Pass the full keyData object which contains voices, masterGain, etc.
+          stopNote(oscillator, gainNode, keyData);
           releaseNote(id, note.step);
         }
 
@@ -121,14 +130,21 @@ export const useKeyboardControls = ({
           });
         }
         setActiveNote(null);
+      } else {
+        console.log(`⌨️ Key ${e.code} released but no active oscillator found`);
       }
     };
 
     // Emergency release for when the window loses focus (Cmd+Tab, Cmd+L, etc.)
     const handleBlur = () => {
-      Object.values(activeOscillators).forEach((nodeGroup) => {
+      console.log('🚨 Window blur - stopping all active notes');
+
+      Object.entries(activeOscillators).forEach(([key, nodeGroup]) => {
+        console.log(`  Stopping ${key}:`, nodeGroup);
         const { oscillator, gainNode, id } = nodeGroup;
-        stopNote(oscillator, gainNode);
+
+        // 🔴 CRITICAL FIX: Pass the full nodeGroup object
+        stopNote(oscillator, gainNode, nodeGroup);
         releaseNote(id); // Release without specific step to clear all
       });
 
@@ -156,5 +172,7 @@ export const useKeyboardControls = ({
     stopNote,
     releaseNote,
     setActiveNote,
+    setActiveOscillators,
+    config,
   ]);
 };

@@ -23,7 +23,6 @@ export const useAudioManager = (
   const dryGainRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
-  const activeOscillatorsMapRef = useRef(new Map()); // Track active oscillators for real-time updates
   const activeFiltersMapRef = useRef(new Map()); // Track active filters for real-time updates
 
   // Initialize Audio Context with Master Gain and Reverb
@@ -194,12 +193,19 @@ export const useAudioManager = (
     if (!periodicWave) return;
 
     // Update all currently playing oscillators
-    activeOscillatorsMapRef.current.forEach((osc) => {
-      try {
-        osc.setPeriodicWave(periodicWave);
-      } catch (e) {
-        // Oscillator might have already stopped
-      }
+    setActiveOscillators((prev) => {
+      Object.values(prev).forEach((oscData) => {
+        if (oscData?.voices) {
+          oscData.voices.forEach(({ oscillator }) => {
+            try {
+              oscillator.setPeriodicWave(periodicWave);
+            } catch (e) {
+              // Oscillator might have already stopped
+            }
+          });
+        }
+      });
+      return prev;
     });
   }, [waveform, createMorphedWave]);
 
@@ -235,13 +241,6 @@ export const useAudioManager = (
       }
     });
   }, [filter.type, filter.frequency, filter.Q, filter.gain]);
-
-  // Handle filter enable/disable separately by reconnecting the audio graph
-  useEffect(() => {
-    // Note: This is a limitation - we can't easily reconnect active nodes
-    // The filter enable/disable will only affect new notes
-    // For real-time bypass, we'd need to use gain nodes instead
-  }, [filter.enabled]);
 
   // Continuous animation loop for fading - ALWAYS RUNNING
   useEffect(() => {
@@ -292,7 +291,9 @@ export const useAudioManager = (
 
       const voices = [];
       const numVoices = unison.voices;
-      const id = Date.now() + Math.random();
+      const id = `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      console.log(`🎵 Creating note ${id} with ${numVoices} unison voices`);
 
       // Create a master gain for this note (controls all voices together)
       const masterNoteGain = ctx.createGain();
@@ -407,10 +408,29 @@ export const useAudioManager = (
 
         voices.push({ oscillator, filterNode, voiceGain, panner });
 
-        // Store for real-time updates
-        activeOscillatorsMapRef.current.set(`${id}_${i}`, oscillator);
-        activeFiltersMapRef.current.set(`${id}_${i}`, filterNode);
+        // Store filter for real-time updates
+        activeFiltersMapRef.current.set(`${id}_voice_${i}`, filterNode);
       }
+
+      const noteData = {
+        id,
+        oscillator: voices[0]?.oscillator, // Return first voice for compatibility
+        gainNode: masterNoteGain,
+        filterNode: voices[0]?.filterNode,
+        voices,
+        masterGain: masterNoteGain,
+        numVoices,
+      };
+
+      // 🔴 CRITICAL FIX: Add to activeOscillators state immediately!
+      setActiveOscillators((prev) => {
+        const updated = { ...prev, [id]: noteData };
+        console.log(
+          `✅ Added note ${id} to state. Total oscillators:`,
+          Object.keys(updated).length
+        );
+        return updated;
+      });
 
       // If not sustained (one-shot note), schedule amplitude release
       if (!sustained) {
@@ -435,21 +455,24 @@ export const useAudioManager = (
         // Clean up references after stop time
         const cleanupDelay = (stopTime - now) * 1000 + 100; // Add 100ms buffer
         setTimeout(() => {
+          console.log(`🧹 Cleaning up note ${id}`);
+          setActiveOscillators((prev) => {
+            const updated = { ...prev };
+            delete updated[id];
+            console.log(
+              `✅ Removed note ${id}. Remaining oscillators:`,
+              Object.keys(updated).length
+            );
+            return updated;
+          });
+
           voices.forEach((_, i) => {
-            activeOscillatorsMapRef.current.delete(`${id}_${i}`);
-            activeFiltersMapRef.current.delete(`${id}_${i}`);
+            activeFiltersMapRef.current.delete(`${id}_voice_${i}`);
           });
         }, cleanupDelay);
       }
 
-      return {
-        oscillator: voices[0]?.oscillator, // Return first voice for compatibility
-        gainNode: masterNoteGain,
-        filterNode: voices[0]?.filterNode,
-        voices,
-        id,
-        masterGain: masterNoteGain, // Expose master gain for sustained note control
-      };
+      return noteData;
     },
     [adsr, waveform, filter, filterEnv, unison, createMorphedWave]
   );
@@ -462,50 +485,101 @@ export const useAudioManager = (
 
       const now = ctx.currentTime;
 
+      console.log(`🛑 Stopping note ${noteData?.id} with ${noteData?.numVoices || 1} voices`);
+
       // If this is a multi-voice note, stop all voices
-      if (noteData?.voices) {
-        noteData.voices.forEach(({ oscillator: voiceOsc }) => {
+      if (noteData?.voices && noteData.voices.length > 0) {
+        console.log(`  Stopping ${noteData.voices.length} individual voice oscillators...`);
+
+        noteData.voices.forEach(({ oscillator: voiceOsc }, i) => {
           try {
+            console.log(`    Voice ${i}: Scheduling stop at ${(now + adsr.release).toFixed(3)}s`);
             voiceOsc.stop(now + adsr.release);
           } catch (e) {
-            // Already stopped
+            console.warn(`    Voice ${i}: Already stopped or error:`, e.message);
           }
         });
 
         // Apply release to master gain
         if (noteData.masterGain) {
-          noteData.masterGain.gain.cancelScheduledValues(now);
-          noteData.masterGain.gain.setValueAtTime(noteData.masterGain.gain.value, now);
-          noteData.masterGain.gain.linearRampToValueAtTime(0.001, now + adsr.release);
+          try {
+            noteData.masterGain.gain.cancelScheduledValues(now);
+            noteData.masterGain.gain.setValueAtTime(noteData.masterGain.gain.value, now);
+            noteData.masterGain.gain.linearRampToValueAtTime(0.001, now + adsr.release);
+            console.log(`  Master gain envelope applied`);
+          } catch (e) {
+            console.warn(`  Master gain error:`, e.message);
+          }
         }
 
         // Clean up all voice references
+        const cleanupTime = adsr.release * 1000 + 100;
+        console.log(`  Scheduling cleanup in ${cleanupTime}ms`);
+
         setTimeout(() => {
-          noteData.voices.forEach((_, i) => {
-            activeOscillatorsMapRef.current.delete(`${noteData.id}_${i}`);
-            activeFiltersMapRef.current.delete(`${noteData.id}_${i}`);
+          console.log(`🧹 Cleanup executing for note ${noteData.id}`);
+
+          // Disconnect all nodes to ensure cleanup
+          noteData.voices.forEach(({ oscillator: voiceOsc, filterNode, voiceGain, panner }, i) => {
+            try {
+              voiceOsc.disconnect();
+              filterNode.disconnect();
+              voiceGain.disconnect();
+              panner.disconnect();
+              console.log(`    Voice ${i}: Disconnected all nodes`);
+            } catch (e) {
+              console.warn(`    Voice ${i}: Disconnect error:`, e.message);
+            }
           });
-        }, adsr.release * 1000 + 100);
+
+          // Disconnect master gain
+          if (noteData.masterGain) {
+            try {
+              noteData.masterGain.disconnect();
+              console.log(`  Master gain disconnected`);
+            } catch (e) {
+              console.warn(`  Master gain disconnect error:`, e.message);
+            }
+          }
+
+          // Remove from state
+          setActiveOscillators((prev) => {
+            const updated = { ...prev };
+            delete updated[noteData.id];
+            console.log(
+              `✅ Removed note ${noteData.id}. Remaining oscillators:`,
+              Object.keys(updated).length
+            );
+            return updated;
+          });
+
+          // Clean up filter refs
+          noteData.voices.forEach((_, i) => {
+            activeFiltersMapRef.current.delete(`${noteData.id}_voice_${i}`);
+          });
+        }, cleanupTime);
       } else {
         // Single voice (legacy support)
+        console.log(`  Single voice mode (legacy)`);
         gainNode.gain.cancelScheduledValues(now);
         gainNode.gain.setValueAtTime(gainNode.gain.value, now);
         gainNode.gain.linearRampToValueAtTime(0.001, now + adsr.release);
 
         try {
           oscillator.stop(now + adsr.release);
+          console.log(`  Oscillator stop scheduled`);
         } catch (e) {
-          // Already stopped
+          console.warn(`  Oscillator stop error:`, e.message);
         }
 
-        // Remove from active maps
         setTimeout(() => {
-          activeOscillatorsMapRef.current.forEach((osc, key) => {
-            if (osc === oscillator) {
-              activeOscillatorsMapRef.current.delete(key);
-              activeFiltersMapRef.current.delete(key);
-            }
-          });
+          try {
+            oscillator.disconnect();
+            gainNode.disconnect();
+            console.log(`  Legacy oscillator disconnected`);
+          } catch (e) {
+            console.warn(`  Legacy disconnect error:`, e.message);
+          }
         }, adsr.release * 1000 + 100);
       }
     },
@@ -551,12 +625,14 @@ export const useAudioManager = (
       const now = Date.now();
       const noteId = nodes.id;
 
+      console.log(`🎹 Note ${sustained ? 'HELD' : 'RELEASED'}: ${note.freq}Hz, ID: ${noteId}`);
+
       setActiveNote(note.freq);
 
       if (sustained) {
         setHeldNotes((prev) => [
           ...prev,
-          { pitch: note.step, octave: note.octave, time: now, id: noteId },
+          { pitch: note.step, octave: note.octave, time: now, id: noteId, noteData: nodes },
         ]);
       } else {
         setReleasedNotes((prev) => [...prev, { pitch: note.step, time: now, id: noteId }]);
