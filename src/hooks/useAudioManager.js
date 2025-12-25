@@ -86,6 +86,42 @@ export const useAudioManager = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Add this inside useAudioManager.js, near your other useEffect hooks
+  useEffect(() => {
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+
+    // Loop through all active notes
+    Object.values(activeOscillators).forEach((noteData) => {
+      if (!noteData.voices) return;
+
+      const numVoices = noteData.voices.length;
+      const centerIndex = (numVoices - 1) / 2;
+
+      noteData.voices.forEach((voice, i) => {
+        try {
+          const offset = numVoices > 1 ? (i - centerIndex) / centerIndex : 0;
+          const isMiddle = Math.abs(i - centerIndex) < 0.6;
+
+          // 1. Dynamic Detune Update
+          // Use exponentialRamp for smooth pitch shifting without clicks
+          voice.oscillator.detune.setTargetAtTime(offset * unison.detune, now, 0.05);
+
+          // 2. Dynamic Blend Update
+          const voiceLevel = isMiddle ? 1.0 : unison.blend;
+          voice.voiceGain.gain.setTargetAtTime(voiceLevel, now, 0.05);
+
+          // 3. Dynamic Pan Update (Optional)
+          voice.panner.pan.setTargetAtTime(offset, now, 0.05);
+        } catch (e) {
+          // Voice might have been released during the loop
+        }
+      });
+    });
+  }, [unison.detune, unison.blend, activeOscillators]);
+
   // Update master volume when mixer changes
   useEffect(() => {
     if (masterGainRef.current) {
@@ -321,22 +357,26 @@ export const useAudioManager = (
         const filterNode = ctx.createBiquadFilter();
         const panner = ctx.createStereoPanner();
 
-        // Calculate detune amount for this voice
+        // 1. Calculate normalized offset (-1 to 1)
         const centerIndex = (numVoices - 1) / 2;
-        const offset = (i - centerIndex) / (numVoices > 1 ? centerIndex : 1);
-        const detuneAmount = offset * unison.detune; // in cents
-        const panAmount = offset * unison.spread; // -1 to 1
+        const offset = numVoices > 1 ? (i - centerIndex) / centerIndex : 0;
+
+        // 2. Identify "Middle" voices (Matches UI logic for even/odd counts)
+        // Even with 2 or 4 voices, the inner-most voices stay at full brightness/volume
+        const isMiddle = Math.abs(i - centerIndex) < 0.6;
+
+        // 3. Pitch: Apply detune based on position
+        oscillator.detune.value = offset * unison.detune;
+
+        // 4. Pan: Link stereo width to the voice index position
+        panner.pan.value = offset;
+
+        // 5. Gain: Center stays full (1.0), sides scale with the Blend setting
+        const voiceLevel = isMiddle ? 1.0 : unison.blend;
+        voiceGain.gain.value = voiceLevel;
 
         // Add phase randomization to prevent phasing artifacts
         const phaseOffset = Math.random() * Math.PI * 2;
-
-        // Apply detune
-        oscillator.detune.value = detuneAmount;
-
-        // Calculate voice blend (center voice is always full, others blend in)
-        const isCenter = i === Math.floor(centerIndex);
-        const voiceLevel = isCenter ? 1.0 : unison.blend;
-        voiceGain.gain.value = voiceLevel;
 
         // Setup filter
         const baseFreq = filter.frequency;
@@ -345,10 +385,6 @@ export const useAudioManager = (
         if (filterNode.gain) {
           filterNode.gain.value = filter.gain;
         }
-
-        // Setup panning
-        panner.pan.value = Math.max(-1, Math.min(1, panAmount));
-
         // Audio chain: oscillator -> filter -> voiceGain -> panner -> masterNoteGain
         oscillator.connect(filterNode);
 
