@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Filter, Power, Zap } from 'lucide-react';
+import { Power, Zap } from 'lucide-react';
 
 const FilterBank = ({ filter, setFilter, className = '' }) => {
   const filterTypes = [
@@ -57,22 +57,17 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
 
   return (
     <div
-      className={`bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-2xl w-64 ${className}`}
+      className={`bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-5 border border-gray-700 shadow-xl w-64 ${className}`}
     >
       {/* Header with Power Toggle */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Filter size={16} className={filter.enabled ? 'text-purple-400' : 'text-gray-600'} />
-          <h3 className="text-white font-bold text-[10px] uppercase tracking-widest">
-            Filter Bank
-          </h3>
-        </div>
+        <h3 className="text-gray-300 font-semibold text-sm">Filter</h3>
         <button
           onClick={() => handleChange('enabled', !filter.enabled)}
-          className={`p-1.5 rounded-md transition-all ${
+          className={`p-1.5 rounded transition-all ${
             filter.enabled
-              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
-              : 'bg-gray-900 text-gray-600 border border-gray-700'
+              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+              : 'bg-gray-800 text-gray-500 border border-gray-700'
           }`}
         >
           <Power size={14} />
@@ -80,10 +75,10 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
       </div>
 
       {/* Parametric EQ Visualizer */}
-      <div className="relative h-28 bg-gray-950 rounded-lg border border-gray-900 mb-5 overflow-hidden shadow-inner">
-        <div className="absolute inset-0 grid grid-cols-6 opacity-[0.03] pointer-events-none">
+      <div className="relative h-28 bg-black rounded-lg border border-gray-700 mb-5 overflow-hidden">
+        <div className="absolute inset-0 grid grid-cols-6 opacity-[0.05] pointer-events-none">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="border-r border-purple-300 h-full" />
+            <div key={i} className="border-r border-gray-600 h-full" />
           ))}
         </div>
 
@@ -91,8 +86,8 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
           <svg viewBox="0 0 300 100" className="w-full h-full">
             <defs>
               <linearGradient id="filterGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#a855f7" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
+                <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
               </linearGradient>
             </defs>
             <path
@@ -103,7 +98,7 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
             <path
               d={curvePath}
               fill="none"
-              stroke="#a855f7"
+              stroke="#22d3ee"
               strokeWidth="2.5"
               strokeLinecap="round"
               className="transition-all duration-300 ease-in-out"
@@ -112,30 +107,33 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
               cx={(Math.log10(filter.frequency / 20) / Math.log10(20000 / 20)) * 300}
               cy={50 - (filter.type === 'notch' ? -45 : (filter.Q / 30) * 40)}
               r="3.5"
-              className="fill-purple-300 shadow-lg animate-pulse"
+              className="fill-cyan-300 shadow-lg animate-pulse"
             />
           </svg>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[10px] font-black text-gray-800 tracking-[0.3em] uppercase">
+            <span className="text-xs font-semibold text-gray-600 tracking-wide uppercase">
               Bypass
             </span>
           </div>
         )}
       </div>
 
-      <div className="space-y-5">
+      <div
+        className={`space-y-4 transition-opacity ${filter.enabled ? 'opacity-100' : 'opacity-30'}`}
+      >
         {/* Filter Type Buttons */}
         <div className="grid grid-cols-4 gap-1.5">
           {filterTypes.map((type) => (
             <button
               key={type.value}
               onClick={() => handleChange('type', type.value)}
-              className={`py-1.5 rounded text-[9px] font-black transition-all ${
-                filter.type === type.value
-                  ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
-                  : 'bg-gray-900 text-gray-500 hover:bg-gray-700'
-              }`}
+              disabled={!filter.enabled}
+              className={`py-1.5 rounded text-xs font-semibold transition-all ${
+                filter.type === type.value && filter.enabled
+                  ? 'bg-cyan-500 text-white shadow-lg'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+              } ${!filter.enabled ? 'cursor-not-allowed' : ''}`}
             >
               {type.label}
             </button>
@@ -143,10 +141,10 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
         </div>
 
         {/* Frequency Slider (Logarithmic 20Hz - 20kHz) */}
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-[10px] font-bold uppercase tracking-tighter">
-            <span className="text-gray-500">Frequency</span>
-            <span className="text-purple-400 font-mono">{Math.round(filter.frequency)}Hz</span>
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs font-medium">
+            <span className="text-gray-400">Frequency</span>
+            <span className="text-cyan-400 font-mono">{Math.round(filter.frequency)} Hz</span>
           </div>
           <input
             type="range"
@@ -158,22 +156,23 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
               const hz = logScale(parseFloat(e.target.value), 20, 20000);
               handleChange('frequency', hz);
             }}
-            className="w-full h-1.5 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-purple-500"
+            disabled={!filter.enabled}
+            className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-500 disabled:cursor-not-allowed"
             style={{
-              background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${inverseLogScale(
+              background: `linear-gradient(to right, #22d3ee 0%, #22d3ee ${inverseLogScale(
                 filter.frequency,
                 20,
                 20000
-              )}%, #111827 ${inverseLogScale(filter.frequency, 20, 20000)}%, #111827 100%)`,
+              )}%, #1f2937 ${inverseLogScale(filter.frequency, 20, 20000)}%, #1f2937 100%)`,
             }}
           />
         </div>
 
         {/* Resonance Slider */}
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-[10px] font-bold uppercase tracking-tighter">
-            <span className="text-gray-500">Resonance</span>
-            <span className="text-purple-400 font-mono">{filter.Q.toFixed(1)}</span>
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs font-medium">
+            <span className="text-gray-400">Resonance</span>
+            <span className="text-cyan-400 font-mono">{filter.Q.toFixed(1)}</span>
           </div>
           <input
             type="range"
@@ -182,20 +181,24 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
             step="0.1"
             value={filter.Q}
             onChange={(e) => handleChange('Q', parseFloat(e.target.value))}
-            className="w-full h-1.5 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-purple-500"
+            disabled={!filter.enabled}
+            className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-500 disabled:cursor-not-allowed"
             style={{
-              background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${
+              background: `linear-gradient(to right, #22d3ee 0%, #22d3ee ${
                 ((filter.Q - 0.1) / 29.9) * 100
-              }%, #111827 ${((filter.Q - 0.1) / 29.9) * 100}%, #111827 100%)`,
+              }%, #1f2937 ${((filter.Q - 0.1) / 29.9) * 100}%, #1f2937 100%)`,
             }}
           />
         </div>
 
         {/* Drive Slider (Logarithmic 1% to 100% curve) */}
-        <div className="space-y-1.5 pt-2 border-t border-gray-700/50">
-          <div className="flex justify-between text-[10px] font-bold uppercase tracking-tighter">
-            <div className="flex items-center gap-1 text-gray-500">
-              <Zap size={10} className={filter.drive > 0 ? 'text-orange-400' : ''} />
+        <div className="space-y-2 pt-2 border-t border-gray-700/50">
+          <div className="flex justify-between text-xs font-medium">
+            <div className="flex items-center gap-1 text-gray-400">
+              <Zap
+                size={12}
+                className={filter.drive > 0 && filter.enabled ? 'text-orange-400' : ''}
+              />
               <span>Drive</span>
             </div>
             <span className="text-orange-400 font-mono">{Math.round(filter.drive || 0)}%</span>
@@ -211,13 +214,14 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
               const scaledDrive = val === 0 ? 0 : logScale(val, 1, 100);
               handleChange('drive', scaledDrive);
             }}
-            className="w-full h-1.5 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-orange-500"
+            disabled={!filter.enabled}
+            className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-orange-500 disabled:cursor-not-allowed"
             style={{
               background: `linear-gradient(to right, #fb923c 0%, #fb923c ${
                 filter.drive === 0 ? 0 : inverseLogScale(filter.drive, 1, 100)
-              }%, #111827 ${
+              }%, #1f2937 ${
                 filter.drive === 0 ? 0 : inverseLogScale(filter.drive, 1, 100)
-              }%, #111827 100%)`,
+              }%, #1f2937 100%)`,
             }}
           />
         </div>
