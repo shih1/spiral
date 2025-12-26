@@ -38,7 +38,7 @@ const PerformanceMonitor = ({
   });
 
   const [warnings, setWarnings] = useState([]);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(true);
   const [expandedSections, setExpandedSections] = useState({
     performance: true,
     audio: true,
