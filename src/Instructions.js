@@ -60,7 +60,19 @@ const Instructions = () => {
               or 3D Tower for vertical harmonic structure.
             </li>
           </ul>
-          <p className="mt-4 font-medium text-blue-400 uppercase tracking-widest">Please enjoy.</p>
+          <div className="mt-6 border-t border-gray-800 pt-4 flex items-end gap-2">
+            <div>
+              <p className="font-medium text-blue-400 uppercase tracking-widest italic">
+                Please enjoy.
+              </p>
+              <p className="text-whiet-500 mt-1 font-serif">— yoshih</p>
+            </div>
+            <img
+              src={process.env.PUBLIC_URL + '/yoshih_walk.gif'}
+              alt="yoshih"
+              className="w-10 h-10 object-contain"
+            />{' '}
+          </div>
         </div>
       </div>
     </div>
