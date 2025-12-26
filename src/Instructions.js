@@ -56,12 +56,12 @@ const Instructions = () => {
               higher).
             </li>
             <li>
-              <strong className="text-white">Sound Design:</strong> Use Synth Controls to adjust
-              Unison voice stacking, Filters, ADSR, and Wavetable morphing.
+              <strong className="text-white">Sound Design:</strong> Adjust Wavetable, Unison,
+              Filters, and ADSR.
             </li>
             <li>
-              <strong className="text-white">Visuals:</strong> Toggle 2D Circle for chord geometry
-              or 3D Tower for vertical harmonic structure.
+              <strong className="text-white">Visuals:</strong> 2D Circle for chord geometry or 3D
+              Tower for vertical harmonic structure.
             </li>
           </ul>
 
