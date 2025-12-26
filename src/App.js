@@ -205,13 +205,13 @@ function App() {
       )}
       {/* 4. Main Visualization Area */}
       <div className="flex-1 flex items-center justify-center p-4 gap-8 overflow-auto">
-        {/* Scaled to 85% and centered using negative margins */}
+        {/* Scaled to 85% and forced to horizontal center */}
         <div
-          className="flex gap-6 items-start origin-center transition-transform"
+          className="flex justify-center gap-6 items-start origin-center transition-transform"
           style={{
             transform: 'scale(0.85)',
             width: '117.6%',
-            margin: '0 -8.8%',
+            margin: '0 -8.8%', // Balanced margin to maintain center alignment
           }}
         >
           {/* Left: The Interactive Keyboard */}
@@ -241,12 +241,14 @@ function App() {
           )}
 
           {/* Right: The Stereo Master Monitor (always visible) */}
-          <StereoMasterMonitor
-            audioContext={audioContext}
-            analyser={analyser}
-            leftAnalyser={leftAnalyser}
-            rightAnalyser={rightAnalyser}
-          />
+          <div className="flex mt-24">
+            <StereoMasterMonitor
+              audioContext={audioContext}
+              analyser={analyser}
+              leftAnalyser={leftAnalyser}
+              rightAnalyser={rightAnalyser}
+            />
+          </div>
         </div>
       </div>
 
