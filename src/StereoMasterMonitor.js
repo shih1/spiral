@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Activity, Radio } from 'lucide-react';
 
-const StereoMasterMonitor = ({ audioContext, analyser }) => {
+const StereoMasterMonitor = ({ audioContext, analyser, leftAnalyser, rightAnalyser }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
 
@@ -20,7 +20,7 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
   const rightBufferRef = useRef(null);
 
   useEffect(() => {
-    if (!analyser || !audioContext) return;
+    if (!analyser || !audioContext || !leftAnalyser || !rightAnalyser) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -55,21 +55,14 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
 
     // Get stereo analyser data
     const getStereoData = () => {
-      // For stereo separation, we'll use the single analyser and split mathematically
-      // In a real implementation, you'd have separate analysers for L/R
-      analyser.getFloatTimeDomainData(bufferRef.current);
-
-      // Simulate stereo by taking odd/even samples
-      // This is a simplified approach; real stereo would need separate analysers
-      for (let i = 0; i < bufferLength / 2; i++) {
-        leftBufferRef.current[i] = bufferRef.current[i * 2];
-        rightBufferRef.current[i] = bufferRef.current[i * 2 + 1] || bufferRef.current[i * 2];
-      }
+      // Get true stereo data from separate L/R analysers
+      leftAnalyser.getFloatTimeDomainData(leftBufferRef.current);
+      rightAnalyser.getFloatTimeDomainData(rightBufferRef.current);
 
       return {
         left: leftBufferRef.current,
         right: rightBufferRef.current,
-        length: bufferLength / 2,
+        length: bufferLength,
       };
     };
 
@@ -114,7 +107,7 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
       ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
       ctx.textAlign = 'right';
 
-      const dbMarks = [0, -3, -6, -12, -20, -30, -40, -60];
+      const dbMarks = [0, -3, -6, -12, -20, -30, -40];
 
       dbMarks.forEach((db) => {
         const yPos = y + dbToPixel(db, height);
@@ -139,14 +132,16 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
 
     // Draw a single VU meter bar
     const drawMeter = (ctx, x, y, width, height, rms, peak, peakHold, label) => {
-      // Background
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
-      ctx.fillRect(x, y, width, height);
+      // Background (black with rounded corners)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, 8);
+      ctx.fill();
 
       // Border
       ctx.strokeStyle = 'rgba(71, 85, 105, 0.5)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, width, height);
+      ctx.stroke();
 
       // Calculate positions
       const rmsDb = linearToDb(rms);
@@ -157,6 +152,12 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
       const peakPos = dbToPixel(peakDb, height);
       const peakHoldPos = dbToPixel(peakHoldDb, height);
 
+      // Create clipping region for rounded corners
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x + 2, y + 2, width - 4, height - 4, 6);
+      ctx.clip();
+
       // Draw RMS bar (solid fill)
       const barHeight = height - rmsPos;
       if (barHeight > 0) {
@@ -164,20 +165,22 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
         const gradient = ctx.createLinearGradient(x, y + height, x, y + rmsPos);
 
         if (rmsDb > -3) {
-          gradient.addColorStop(0, 'rgba(239, 68, 68, 0.8)'); // Red at top
-          gradient.addColorStop(0.3, 'rgba(251, 191, 36, 0.7)'); // Yellow
-          gradient.addColorStop(1, 'rgba(34, 197, 94, 0.6)'); // Green at bottom
-        } else if (rmsDb > -12) {
-          gradient.addColorStop(0, 'rgba(251, 191, 36, 0.8)'); // Yellow at top
+          gradient.addColorStop(0, 'rgba(239, 68, 68, 0.9)'); // Red at top
+          gradient.addColorStop(0.3, 'rgba(251, 191, 36, 0.8)'); // Yellow
           gradient.addColorStop(1, 'rgba(34, 197, 94, 0.7)'); // Green at bottom
+        } else if (rmsDb > -12) {
+          gradient.addColorStop(0, 'rgba(251, 191, 36, 0.9)'); // Yellow at top
+          gradient.addColorStop(1, 'rgba(34, 197, 94, 0.8)'); // Green at bottom
         } else {
-          gradient.addColorStop(0, 'rgba(34, 197, 94, 0.8)');
-          gradient.addColorStop(1, 'rgba(20, 184, 166, 0.7)'); // Teal at bottom
+          gradient.addColorStop(0, 'rgba(34, 197, 94, 0.9)');
+          gradient.addColorStop(1, 'rgba(20, 184, 166, 0.8)'); // Teal at bottom
         }
 
         ctx.fillStyle = gradient;
         ctx.fillRect(x + 2, y + rmsPos, width - 4, barHeight);
       }
+
+      ctx.restore();
 
       // Draw peak line (thin, bright)
       if (peakDb > -60) {
@@ -194,8 +197,8 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
         ctx.strokeStyle = peakHoldDb > -3 ? 'rgba(239, 68, 68, 0.9)' : 'rgba(251, 191, 36, 0.9)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(x, y + peakHoldPos);
-        ctx.lineTo(x + width, y + peakHoldPos);
+        ctx.moveTo(x + 2, y + peakHoldPos);
+        ctx.lineTo(x + width - 2, y + peakHoldPos);
         ctx.stroke();
       }
 
@@ -205,67 +208,128 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
       ctx.textAlign = 'center';
       ctx.fillText(label, x + width / 2, y + height + 15);
 
-      // Draw dB value
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-      ctx.font = '9px monospace';
-      ctx.fillText(`${rmsDb > -60 ? rmsDb.toFixed(1) : '-∞'} dB`, x + width / 2, y + height + 27);
+      // Draw dB value (only if above -60dB)
+      if (rmsDb > -60) {
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
+        ctx.font = '9px monospace';
+        ctx.fillText(`${rmsDb.toFixed(1)} dB`, x + width / 2, y + height + 27);
+      }
     };
 
-    // Draw Lissajous stereo imager
-    const drawLissajous = (ctx, x, y, size, leftData, rightData, length) => {
-      // Background
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-      ctx.fillRect(x, y, size, size);
+    // Draw Stereo Vectorscope (Goniometer)
+    const drawVectorscope = (ctx, x, y, size, leftData, rightData, length) => {
+      const centerX = x + size / 2;
+      const centerY = y + size / 2;
+      const radius = size / 2 - 10;
+
+      // Background (black with rounded corners)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+      ctx.beginPath();
+      ctx.roundRect(x, y, size, size, 8);
+      ctx.fill();
 
       // Border
       ctx.strokeStyle = 'rgba(71, 85, 105, 0.5)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, size, size);
+      ctx.stroke();
 
-      // Draw center crosshairs
-      const centerX = x + size / 2;
-      const centerY = y + size / 2;
-
-      ctx.strokeStyle = 'rgba(71, 85, 105, 0.3)';
+      // Draw circular boundary
+      ctx.strokeStyle = 'rgba(71, 85, 105, 0.4)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(centerX, y);
-      ctx.lineTo(centerX, y + size);
-      ctx.moveTo(x, centerY);
-      ctx.lineTo(x + size, centerY);
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Draw diagonal reference lines (mono = vertical, out-of-phase = horizontal)
+      // Draw reference circles (at -6dB and -12dB points)
       ctx.strokeStyle = 'rgba(71, 85, 105, 0.2)';
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + size, y + size);
-      ctx.moveTo(x + size, y);
-      ctx.lineTo(x, y + size);
+      ctx.arc(centerX, centerY, radius * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius * 0.25, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Draw persistence trail (fade previous frame)
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.2)';
-      ctx.fillRect(x, y, size, size);
+      // Draw axis lines (L/R and M/S)
+      ctx.strokeStyle = 'rgba(71, 85, 105, 0.3)';
+      ctx.lineWidth = 1;
 
-      // Draw Lissajous curve (rotated 45 degrees)
-      ctx.strokeStyle = 'rgba(34, 211, 238, 0.7)';
+      // L-R axis (horizontal)
+      ctx.beginPath();
+      ctx.moveTo(centerX - radius, centerY);
+      ctx.lineTo(centerX + radius, centerY);
+      ctx.stroke();
+
+      // M-S axis (vertical)
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY - radius);
+      ctx.lineTo(centerX, centerY + radius);
+      ctx.stroke();
+
+      // Draw diagonal reference lines (+45° and -45°)
+      ctx.strokeStyle = 'rgba(71, 85, 105, 0.2)';
+      const diag = radius * 0.707; // cos(45°) = sin(45°) = 0.707
+      ctx.beginPath();
+      ctx.moveTo(centerX - diag, centerY - diag);
+      ctx.lineTo(centerX + diag, centerY + diag);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(centerX - diag, centerY + diag);
+      ctx.lineTo(centerX + diag, centerY - diag);
+      ctx.stroke();
+
+      // Draw labels inside the vectorscope
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+
+      // L and R labels (on sides, inside the circle)
+      ctx.fillText('L', x + 15, centerY + 4);
+      ctx.fillText('R', x + size - 15, centerY + 4);
+
+      // M and S labels (top and bottom, inside the circle)
+      ctx.fillText('M', centerX, y + 20);
+      ctx.fillText('S', centerX, y + size - 12);
+
+      // Fade previous frame slightly for persistence
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius - 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Calculate normalization factor to make it volume-agnostic
+      // Find the maximum magnitude across both channels
+      let maxMagnitude = 0;
+      for (let i = 0; i < length; i++) {
+        const l = Math.abs(leftData[i] || 0);
+        const r = Math.abs(rightData[i] || 0);
+        const magnitude = Math.sqrt(l * l + r * r);
+        if (magnitude > maxMagnitude) {
+          maxMagnitude = magnitude;
+        }
+      }
+
+      // Use a threshold to avoid normalizing silence
+      const threshold = 0.01;
+      const normalizationFactor = maxMagnitude > threshold ? 1.0 / maxMagnitude : 1.0;
+
+      // Draw vectorscope plot with normalized values
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.8)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
 
-      const step = Math.max(1, Math.floor(length / 500));
+      const step = Math.max(1, Math.floor(length / 800));
       let firstPoint = true;
 
       for (let i = 0; i < length; i += step) {
-        const l = leftData[i] || 0;
-        const r = rightData[i] || 0;
+        const l = (leftData[i] || 0) * normalizationFactor;
+        const r = (rightData[i] || 0) * normalizationFactor;
 
-        // 45-degree rotation: M+S representation
-        const mid = (l + r) / 2;
-        const side = (l - r) / 2;
+        // Standard vectorscope: X = L-R (side), Y = L+R (mid)
+        const side = (l - r) * 0.5; // X-axis: stereo width
+        const mid = (l + r) * 0.5; // Y-axis: mono sum
 
-        const plotX = centerX + mid * size * 0.4;
-        const plotY = centerY - side * size * 0.4;
+        const plotX = centerX + side * radius * 0.95;
+        const plotY = centerY - mid * radius * 0.95; // Invert Y for upward positive
 
         if (firstPoint) {
           ctx.moveTo(plotX, plotY);
@@ -281,6 +345,12 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
       ctx.strokeStyle = 'rgba(34, 211, 238, 0.3)';
       ctx.lineWidth = 3;
       ctx.stroke();
+
+      // Draw center dot
+      ctx.fillStyle = 'rgba(100, 116, 139, 0.5)';
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 2, 0, Math.PI * 2);
+      ctx.fill();
     };
 
     // Main animation loop
@@ -339,24 +409,25 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
         rightPeakHoldRef.current *= RELEASE_COEFF;
       }
 
-      // Layout calculations
-      const meterHeight = height * 0.45;
+      // Layout calculations - center everything properly
+      const meterHeight = height * 0.38;
       const meterWidth = 40;
       const meterSpacing = 20;
-      const scaleWidth = 35;
-      const totalMeterWidth = scaleWidth + meterWidth * 2 + meterSpacing;
 
-      const lissajousSize = Math.min(width - 40, height * 0.45);
-      const lissajousY = meterHeight + 30;
+      // Calculate total width of just the two meters (no scale)
+      const metersOnlyWidth = meterWidth * 2 + meterSpacing;
+      const meterStartX = (width - metersOnlyWidth) / 2;
+      const meterBottomY = 20 + meterHeight + 35;
 
-      // Draw meter scale
-      drawMeterScale(ctx, scaleWidth - 5, 10, scaleWidth, meterHeight);
+      const vectorscopeSize = Math.min(width - 40, height * 0.48);
+      const vectorscopeX = (width - vectorscopeSize) / 2;
+      const vectorscopeY = meterBottomY + 20;
 
       // Draw left meter
       drawMeter(
         ctx,
-        scaleWidth,
-        10,
+        meterStartX,
+        20,
         meterWidth,
         meterHeight,
         leftRmsRef.current,
@@ -368,8 +439,8 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
       // Draw right meter
       drawMeter(
         ctx,
-        scaleWidth + meterWidth + meterSpacing,
-        10,
+        meterStartX + meterWidth + meterSpacing,
+        20,
         meterWidth,
         meterHeight,
         rightRmsRef.current,
@@ -378,29 +449,28 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
         'R'
       );
 
-      // Draw Lissajous stereo imager
-      const lissajousX = (width - lissajousSize) / 2;
-      drawLissajous(ctx, lissajousX, lissajousY, lissajousSize, left, right, length);
+      // Draw Vectorscope
+      drawVectorscope(ctx, vectorscopeX, vectorscopeY, vectorscopeSize, left, right, length);
 
-      // Draw labels
+      // Draw section labels
       ctx.fillStyle = 'rgba(203, 213, 225, 0.9)';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('LEVEL METERS', 10, 25);
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('VOLTAGE METERS', width / 2, 8);
 
-      ctx.fillText('STEREO IMAGER', 10, lissajousY + 15);
+      ctx.fillText('STEREO VECTORSCOPE', width / 2, vectorscopeY - 8);
 
-      // Draw stereo width indicator
+      // Draw correlation info
       const correlation = calculateCorrelation(left, right, length);
       const correlationPercent = (((correlation + 1) / 2) * 100).toFixed(0);
       ctx.font = '10px monospace';
       ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
       ctx.fillText(
-        `Correlation: ${correlationPercent}% ${
-          correlation > 0.9 ? '(Mono)' : correlation < -0.5 ? '(Out of Phase)' : '(Stereo)'
+        `Phase: ${correlationPercent}% ${
+          correlation > 0.9 ? '(Mono)' : correlation < 0 ? '(Out of Phase)' : '(Stereo)'
         }`,
-        10,
-        lissajousY + lissajousSize + 20
+        width / 2,
+        vectorscopeY + vectorscopeSize + 25
       );
 
       animationRef.current = requestAnimationFrame(animate);
@@ -430,9 +500,9 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
       }
       window.removeEventListener('resize', setCanvasSize);
     };
-  }, [audioContext, analyser]);
+  }, [audioContext, analyser, leftAnalyser, rightAnalyser]);
 
-  if (!audioContext || !analyser) {
+  if (!audioContext || !analyser || !leftAnalyser || !rightAnalyser) {
     return (
       <div className="bg-gray-800/50 rounded-lg p-8 border border-gray-700">
         <div className="flex flex-col items-center gap-3 text-gray-400">
@@ -446,19 +516,11 @@ const StereoMasterMonitor = ({ audioContext, analyser }) => {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-gray-300">
-        <Radio size={18} className="text-cyan-400" />
-        <h3 className="font-semibold text-sm">Master Output Monitor</h3>
-      </div>
-
-      <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden">
-        <canvas ref={canvasRef} className="w-full" style={{ height: '600px', display: 'block' }} />
-      </div>
-
-      <div className="text-xs text-gray-500 space-y-1">
-        <p>• Level Meters: VU-style metering with peak hold</p>
-        <p>• Stereo Imager: Phase correlation visualization</p>
-        <p>• Vertical line = Mono | Diagonal = Stereo | Horizontal = Out of Phase</p>
+      <div
+        className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden"
+        style={{ width: '280px' }}
+      >
+        <canvas ref={canvasRef} className="w-full" style={{ height: '500px', display: 'block' }} />
       </div>
     </div>
   );

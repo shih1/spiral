@@ -91,6 +91,8 @@ function App() {
     stopNote,
     releaseNote,
     analyser,
+    leftAnalyser,
+    rightAnalyser,
     audioContext,
   } = useAudioManager(config, mixer, reverb, adsr, waveform, filter, filterEnv, unison);
 
@@ -228,7 +230,12 @@ function App() {
           )}
 
           {/* Right: The Stereo Master Monitor (always visible) */}
-          <StereoMasterMonitor audioContext={audioContext} analyser={analyser} />
+          <StereoMasterMonitor
+            audioContext={audioContext}
+            analyser={analyser}
+            leftAnalyser={leftAnalyser}
+            rightAnalyser={rightAnalyser}
+          />
         </div>
       </div>
 

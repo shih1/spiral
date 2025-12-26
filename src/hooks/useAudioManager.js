@@ -19,8 +19,16 @@ export const useAudioManager = (
   unison
 ) => {
   // 1. Initialize audio context and core nodes
-  const { audioContext, masterGain, reverbNode, reverbGain, dryGain, analyser } =
-    useAudioContext(mixer);
+  const {
+    audioContext,
+    masterGain,
+    reverbNode,
+    reverbGain,
+    dryGain,
+    analyser,
+    leftAnalyser,
+    rightAnalyser,
+  } = useAudioContext(mixer);
 
   // 2. Setup reverb effect
   useReverbEffect(reverb, audioContext, reverbNode, reverbGain, dryGain);
@@ -77,6 +85,8 @@ export const useAudioManager = (
     stopNote: noteLifecycle.stopNote,
     releaseNote: noteLifecycle.releaseNote,
     analyser,
+    leftAnalyser, // ADD THIS
+    rightAnalyser, // ADD THIS
     audioContext,
   };
 };

@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 
 /**
  * Manages the Web Audio API context, master gain, analyser, and reverb infrastructure
+ * Now with proper stereo analysis via channel splitter
  */
 export const useAudioContext = (mixer) => {
   const audioContextRef = useRef(null);
@@ -10,6 +11,9 @@ export const useAudioContext = (mixer) => {
   const reverbGainRef = useRef(null);
   const dryGainRef = useRef(null);
   const analyserRef = useRef(null);
+  const leftAnalyserRef = useRef(null);
+  const rightAnalyserRef = useRef(null);
+  const splitterRef = useRef(null);
 
   // Initialize Audio Context with Master Gain and Reverb
   useEffect(() => {
@@ -20,14 +24,29 @@ export const useAudioContext = (mixer) => {
     masterGainRef.current = ctx.createGain();
     masterGainRef.current.gain.value = mixer.masterVolume;
 
-    // Create analyser node
+    // Create main analyser node (for existing visualizers)
     analyserRef.current = ctx.createAnalyser();
     analyserRef.current.fftSize = 2048;
     analyserRef.current.smoothingTimeConstant = 0.8;
 
-    // Connect masterGain -> analyser -> destination
+    // Create stereo analysers for true L/R separation
+    splitterRef.current = ctx.createChannelSplitter(2);
+    leftAnalyserRef.current = ctx.createAnalyser();
+    rightAnalyserRef.current = ctx.createAnalyser();
+
+    leftAnalyserRef.current.fftSize = 2048;
+    leftAnalyserRef.current.smoothingTimeConstant = 0.8;
+    rightAnalyserRef.current.fftSize = 2048;
+    rightAnalyserRef.current.smoothingTimeConstant = 0.8;
+
+    // Connect masterGain -> analyser -> destination (for main visualizer)
     masterGainRef.current.connect(analyserRef.current);
     analyserRef.current.connect(ctx.destination);
+
+    // Connect masterGain -> splitter -> L/R analysers (for stereo vectorscope)
+    masterGainRef.current.connect(splitterRef.current);
+    splitterRef.current.connect(leftAnalyserRef.current, 0); // Left channel
+    splitterRef.current.connect(rightAnalyserRef.current, 1); // Right channel
 
     // Create reverb convolver node
     reverbNodeRef.current = ctx.createConvolver();
@@ -84,5 +103,7 @@ export const useAudioContext = (mixer) => {
     reverbGain: reverbGainRef.current,
     dryGain: dryGainRef.current,
     analyser: analyserRef.current,
+    leftAnalyser: leftAnalyserRef.current,
+    rightAnalyser: rightAnalyserRef.current,
   };
 };
