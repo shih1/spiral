@@ -51,9 +51,9 @@ const Instructions = () => {
               spiral for a microtonal glissando.
             </li>
             <li>
-              <strong className="text-white">Keyboard Map:</strong> Reference the Keyboard
-              Visualizer below for real-time key assignments (Z-/ for lower octaves, Q-P for
-              higher).
+              <strong className="text-white">Keyboard Input:</strong> Reference the Keyboard Input
+              above for real-time key assignments (Z-/ for lower octaves, Q-P for higher).
+              Guitarists should be able to adapt if you visualize Z and Q as the string root.
             </li>
             <li>
               <strong className="text-white">Sound Design:</strong> Adjust Wavetable, Unison,
@@ -71,7 +71,7 @@ const Instructions = () => {
               <p className="font-bold text-blue-400 text-2xl uppercase tracking-widest italic">
                 Please enjoy.
               </p>
-              <p className="text-white mt-1 text-xl font-serif">— yoshih</p>
+              <p className="text-white-600 mt-1 text-base font-mono lowercase">— yoshih</p>
             </div>
             <img
               src={process.env.PUBLIC_URL + '/yoshih_walk.gif'}
