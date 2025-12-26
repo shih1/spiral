@@ -128,10 +128,8 @@ function App() {
       {/* 2. Header / Navigation */}
       <div className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 shadow-lg">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-500/20 rounded-lg">
-            <Volume2 className="text-blue-400" size={24} />
-          </div>
-          <h1 className="text-xl font-bold text-white tracking-wide">Microtonal Spiral</h1>
+          <div className="p-2 bg-blue-500/20 rounded-lg"></div>
+          <h1 className="text-xl font-bold text-white tracking-wide">Microtonal Spiral Piano</h1>
         </div>
 
         <div className="flex items-center gap-4">
