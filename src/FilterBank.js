@@ -197,30 +197,30 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
             <div className="flex items-center gap-1 text-gray-400">
               <Zap
                 size={12}
-                className={filter.drive > 0 && filter.enabled ? 'text-orange-400' : ''}
+                className={filter.drive > 0 && filter.enabled ? 'text-cyan-400' : ''}
               />
               <span>Drive</span>
             </div>
-            <span className="text-orange-400 font-mono">{Math.round(filter.drive || 0)}%</span>
+            <span className="text-cyan-400 font-mono">{Math.round(filter.drive || 0)}%</span>
           </div>
           <input
             type="range"
             min="0"
             max="100"
             step="0.1"
-            value={filter.drive === 0 ? 0 : inverseLogScale(filter.drive, 1, 100)}
+            value={!filter.drive || filter.drive <= 0 ? 0 : inverseLogScale(filter.drive, 1, 100)}
             onChange={(e) => {
               const val = parseFloat(e.target.value);
               const scaledDrive = val === 0 ? 0 : logScale(val, 1, 100);
               handleChange('drive', scaledDrive);
             }}
             disabled={!filter.enabled}
-            className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-orange-500 disabled:cursor-not-allowed"
+            className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-500 disabled:cursor-not-allowed"
             style={{
-              background: `linear-gradient(to right, #fb923c 0%, #fb923c ${
-                filter.drive === 0 ? 0 : inverseLogScale(filter.drive, 1, 100)
+              background: `linear-gradient(to right, #22d3ee 0%, #22d3ee ${
+                !filter.drive || filter.drive <= 0 ? 0 : inverseLogScale(filter.drive, 1, 100)
               }%, #1f2937 ${
-                filter.drive === 0 ? 0 : inverseLogScale(filter.drive, 1, 100)
+                !filter.drive || filter.drive <= 0 ? 0 : inverseLogScale(filter.drive, 1, 100)
               }%, #1f2937 100%)`,
             }}
           />

@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Zap, RotateCcw, Power } from 'lucide-react';
+import React from 'react';
+import { RotateCcw, Power } from 'lucide-react';
 
 const DEFAULTS = {
   active: true,
@@ -29,51 +29,49 @@ const FilterEnvelope = ({ filterEnv, setFilterEnv, className = '' }) => {
   // Helper for background gradients
   const getLinearBg = (val, max, min = 0) => {
     const percentage = ((val - min) / (max - min)) * 100;
-    return `linear-gradient(to right, #eab308 0%, #eab308 ${percentage}%, #111827 ${percentage}%, #111827 100%)`;
+    return `linear-gradient(to right, #22d3ee 0%, #22d3ee ${percentage}%, #1f2937 ${percentage}%, #1f2937 100%)`;
   };
 
   return (
     <div
-      className={`bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-2xl transition-opacity ${
-        !filterEnv.active ? 'opacity-60' : 'opacity-100'
-      } ${className}`}
+      className={`bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-5 border border-gray-700 shadow-xl ${className}`}
     >
       {/* HEADER SECTION */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2">
-          <Zap size={18} className={filterEnv.active ? 'text-yellow-400' : 'text-gray-600'} />
-          <h3 className="text-white font-bold text-sm tracking-tight uppercase">Filter Env</h3>
-        </div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-gray-300 font-semibold text-sm">Filter Envelope</h3>
 
         <div className="flex gap-2">
           <button
             onClick={handleReset}
-            className="p-1.5 hover:bg-gray-700 rounded-md text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-gray-200 transition-colors"
             title="Reset to Default"
           >
             <RotateCcw size={14} />
           </button>
           <button
             onClick={toggleActive}
-            className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase transition-all ${
-              filterEnv.active ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-gray-400'
+            className={`p-1.5 rounded transition-all ${
+              filterEnv.active
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                : 'bg-gray-800 text-gray-500 border border-gray-700'
             }`}
           >
-            <Power size={10} />
-            {filterEnv.active ? 'On' : 'Off'}
+            <Power size={14} />
           </button>
         </div>
       </div>
 
       {/* PARAMETER GRID */}
-      <div className="space-y-4">
+      <div
+        className={`space-y-4 transition-opacity ${
+          filterEnv.active ? 'opacity-100' : 'opacity-30'
+        }`}
+      >
         {/* Amount Slider (Bipolar) */}
-        <div className="group">
-          <div className="flex justify-between items-center mb-1.5">
-            <label className="text-gray-500 text-[10px] font-bold uppercase tracking-wider">
-              Mod Amount
-            </label>
-            <span className="text-yellow-400 text-xs font-mono bg-black/30 px-1.5 rounded">
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-gray-400 text-xs font-medium">Mod Amount</label>
+            <span className="text-cyan-400 text-xs font-mono">
               {filterEnv.amount > 0 ? '+' : ''}
               {Math.round(filterEnv.amount)} Hz
             </span>
@@ -85,9 +83,10 @@ const FilterEnvelope = ({ filterEnv, setFilterEnv, className = '' }) => {
             step="50"
             value={filterEnv.amount}
             onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
-            className="w-full h-1.5 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+            disabled={!filterEnv.active}
+            className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-500 disabled:cursor-not-allowed"
             style={{
-              background: `linear-gradient(to right, #1f2937 0%, #1f2937 50%, #eab308 50%, #eab308 ${
+              background: `linear-gradient(to right, #1f2937 0%, #1f2937 50%, #22d3ee 50%, #22d3ee ${
                 50 + (filterEnv.amount / 20000) * 50
               }%, #1f2937 ${50 + (filterEnv.amount / 20000) * 50}%, #1f2937 100%)`,
             }}
@@ -103,11 +102,9 @@ const FilterEnvelope = ({ filterEnv, setFilterEnv, className = '' }) => {
             { id: 'release', label: 'Release', max: 5 },
           ].map((param) => (
             <div key={param.id}>
-              <div className="flex justify-between mb-1">
-                <label className="text-gray-500 text-[9px] font-bold uppercase">
-                  {param.label}
-                </label>
-                <span className="text-yellow-500/80 text-[10px] font-mono">
+              <div className="flex justify-between mb-1.5">
+                <label className="text-gray-400 text-xs font-medium">{param.label}</label>
+                <span className="text-cyan-400 text-xs font-mono">
                   {param.id === 'sustain'
                     ? `${Math.round(filterEnv[param.id] * 100)}%`
                     : filterEnv[param.id] < 1
@@ -122,7 +119,8 @@ const FilterEnvelope = ({ filterEnv, setFilterEnv, className = '' }) => {
                 step="0.001"
                 value={filterEnv[param.id]}
                 onChange={(e) => handleChange(param.id, parseFloat(e.target.value))}
-                className="w-full h-1 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                disabled={!filterEnv.active}
+                className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-500 disabled:cursor-not-allowed"
                 style={{ background: getLinearBg(filterEnv[param.id], param.max) }}
               />
             </div>
@@ -131,7 +129,7 @@ const FilterEnvelope = ({ filterEnv, setFilterEnv, className = '' }) => {
       </div>
 
       {/* VISUALIZER */}
-      <div className="mt-6 h-20 bg-black/40 rounded-lg border border-gray-900 relative overflow-hidden group">
+      <div className="mt-5 h-20 bg-black rounded-lg border border-gray-700 relative overflow-hidden">
         <svg className="w-full h-full" viewBox="0 0 200 60" preserveAspectRatio="none">
           <path
             d={`
@@ -142,7 +140,7 @@ const FilterEnvelope = ({ filterEnv, setFilterEnv, className = '' }) => {
               L ${filterEnv.attack * 15 + filterEnv.decay * 15 + 40 + filterEnv.release * 15},60
             `}
             fill="none"
-            stroke="#eab308"
+            stroke="#22d3ee"
             strokeWidth="2"
             className="transition-all duration-200"
           />
@@ -160,16 +158,16 @@ const FilterEnvelope = ({ filterEnv, setFilterEnv, className = '' }) => {
           />
           <defs>
             <linearGradient id="envGradient" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#eab308" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#eab308" stopOpacity="0" />
+              <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
             </linearGradient>
           </defs>
         </svg>
-        <div className="absolute inset-0 flex justify-around items-end pb-1 pointer-events-none opacity-20 group-hover:opacity-50 transition-opacity">
-          <span className="text-[8px] text-white font-mono">A</span>
-          <span className="text-[8px] text-white font-mono">D</span>
-          <span className="text-[8px] text-white font-mono">S</span>
-          <span className="text-[8px] text-white font-mono">R</span>
+        <div className="absolute inset-0 flex justify-around items-end pb-1 pointer-events-none opacity-20">
+          <span className="text-xs text-gray-400 font-mono">A</span>
+          <span className="text-xs text-gray-400 font-mono">D</span>
+          <span className="text-xs text-gray-400 font-mono">S</span>
+          <span className="text-xs text-gray-400 font-mono">R</span>
         </div>
       </div>
     </div>
