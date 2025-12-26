@@ -568,8 +568,8 @@ ${warnings.map((w) => `  • ${w.message}`).join('\n')}`;
           <MetricRow
             label="🔴 TOTAL VOICES (The Key Metric!)"
             value={metrics.totalVoices}
-            warning={metrics.totalVoices > 10}
-            critical={metrics.totalVoices > 20}
+            warning={metrics.totalVoices > 100}
+            critical={metrics.totalVoices > 300}
             info={`${metrics.oscillatorCount} osc × ${unison?.voices || 1} unison`}
           />
 
