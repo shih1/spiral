@@ -9,13 +9,13 @@ const Instructions = () => {
         <div>
           {/* Section titles bumped to text-2xl */}
           <h3 className="text-white text-2xl font-semibold mb-4 uppercase tracking-wider">
-            Musical Frontier
+            Musical Mission
           </h3>
           <p className="mb-6 text-xl">
             This project is the culmination of years of global travel and a desire to bridge the gap
             between Western musical foundations and the vast world of non-Western and historical
-            scales. By dividing the octave into different numbers of equal steps (N-TET), we
-            rediscover lost intervals and cross-cultural harmonies.
+            scales. By dividing the octave into different numbers of equal steps (N-TET), rediscover
+            lost intervals and cross-cultural harmonies.
           </p>
           <div className="grid grid-cols-1 gap-2">
             <p>
@@ -53,7 +53,7 @@ const Instructions = () => {
             <li>
               <strong className="text-white">Keyboard Input:</strong> Reference the Keyboard Input
               above for real-time key assignments (Z-/ for lower octaves, Q-P for higher).
-              Guitarists should be able to adapt if you visualize Z and Q as the string root.
+              Guitarists should be able to adapt if you visualize Z and Q as the string roots.
             </li>
             <li>
               <strong className="text-white">Sound Design:</strong> Adjust Wavetable, Unison,
@@ -68,10 +68,8 @@ const Instructions = () => {
           {/* Signature Area - Scaled up with text-white */}
           <div className="mt-10 border-t border-gray-800 pt-6 flex items-end gap-4">
             <div>
-              <p className="font-bold text-blue-400 text-2xl uppercase tracking-widest italic">
-                Please enjoy.
-              </p>
-              <p className="text-white-600 mt-1 text-base font-mono lowercase">— yoshih</p>
+              <p className="text-cyan-500/80 text-sm font-mono tracking-tight">please enjoy.</p>
+              <p className="text-white-500 text-xs font-mono lowercase opacity-70">— yoshih</p>
             </div>
             <img
               src={process.env.PUBLIC_URL + '/yoshih_walk.gif'}
