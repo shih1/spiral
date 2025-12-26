@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Waves } from 'lucide-react';
 
 const WaveformSelector = ({ waveform, setWaveform, className = '' }) => {
   const [isDragging, setIsDragging] = useState(false);
@@ -41,17 +40,33 @@ const WaveformSelector = ({ waveform, setWaveform, className = '' }) => {
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+
+    const width = rect.width;
+    const height = rect.height;
     const centerY = height / 2;
     const amplitude = height * 0.35;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
+    // Clear canvas with black background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw center line
+    ctx.strokeStyle = 'rgba(71, 85, 105, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(width, centerY);
+    ctx.stroke();
 
     // Draw waveform
     ctx.beginPath();
-    ctx.strokeStyle = '#60a5fa';
+    ctx.strokeStyle = '#22d3ee';
     ctx.lineWidth = 2.5;
 
     const points = 200;
@@ -90,12 +105,9 @@ const WaveformSelector = ({ waveform, setWaveform, className = '' }) => {
 
     ctx.stroke();
 
-    // Draw grid lines
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, centerY);
-    ctx.lineTo(width, centerY);
+    // Add glow effect
+    ctx.strokeStyle = 'rgba(34, 211, 238, 0.3)';
+    ctx.lineWidth = 4;
     ctx.stroke();
   }, [position]);
 
@@ -149,27 +161,22 @@ const WaveformSelector = ({ waveform, setWaveform, className = '' }) => {
   }, [isDragging, position]);
 
   return (
-    <div className={`bg-gray-800 rounded-lg p-4 border border-gray-700 ${className}`}>
-      <div className="flex items-center gap-2 mb-3">
-        <Waves size={18} className="text-blue-400" />
-        <h3 className="text-white font-medium text-sm">Waveform</h3>
+    <div
+      className={`bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-5 border border-gray-700 shadow-xl ${className}`}
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <h3 className="text-gray-300 font-semibold text-sm">WAVETABLE</h3>
       </div>
 
       {/* Waveform Display */}
-      <div className="bg-gray-900 rounded-lg p-3 mb-3 border border-gray-700">
-        <canvas
-          ref={canvasRef}
-          width={280}
-          height={80}
-          className="w-full"
-          style={{ imageRendering: 'crisp-edges' }}
-        />
+      <div className="bg-black rounded-lg overflow-hidden border border-gray-700 mb-4">
+        <canvas ref={canvasRef} className="w-full" style={{ height: '80px', display: 'block' }} />
       </div>
 
       {/* Slider Control */}
       <div
         ref={containerRef}
-        className="relative h-12 bg-gray-900 rounded-lg cursor-pointer border border-gray-700"
+        className="relative h-12 bg-black rounded-lg cursor-pointer border border-gray-700 mb-3"
         onMouseDown={handleMouseDown}
       >
         {/* Snap point indicators */}
@@ -183,19 +190,19 @@ const WaveformSelector = ({ waveform, setWaveform, className = '' }) => {
 
         {/* Draggable handle */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-6 h-10 bg-gradient-to-b from-blue-500 to-blue-600 rounded shadow-lg cursor-grab active:cursor-grabbing border-2 border-blue-400 transition-transform hover:scale-105"
+          className="absolute top-1/2 -translate-y-1/2 w-6 h-10 bg-gradient-to-b from-cyan-400 to-cyan-500 rounded shadow-lg cursor-grab active:cursor-grabbing border-2 border-cyan-300 transition-transform hover:scale-105"
           style={{
             left: `calc(${position * 100}% - 12px)`,
           }}
         >
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-1 h-6 bg-blue-300 rounded-full opacity-50" />
+            <div className="w-1 h-6 bg-cyan-200 rounded-full opacity-50" />
           </div>
         </div>
       </div>
 
       {/* Labels */}
-      <div className="flex justify-between mt-2 px-1">
+      <div className="flex justify-between px-1">
         {waveforms.map((wave, idx) => (
           <button
             key={idx}
@@ -203,23 +210,15 @@ const WaveformSelector = ({ waveform, setWaveform, className = '' }) => {
               setPosition(wave.position);
               if (setWaveform) setWaveform(wave.position);
             }}
-            className={`text-xs transition-colors ${
+            className={`text-xs font-medium transition-colors ${
               Math.abs(position - wave.position) < 0.05
-                ? 'text-blue-400 font-semibold'
+                ? 'text-cyan-400'
                 : 'text-gray-500 hover:text-gray-300'
             }`}
           >
             {wave.label}
           </button>
         ))}
-      </div>
-
-      {/* Current waveform indicator */}
-      <div className="mt-3 text-center">
-        <span className="text-gray-400 text-xs">Current: </span>
-        <span className="text-blue-400 text-xs font-semibold">
-          {waveforms.find((w) => Math.abs(w.position - position) < 0.05)?.label || 'Custom'}
-        </span>
       </div>
     </div>
   );

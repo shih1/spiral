@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Zap, Clock } from 'lucide-react';
 
 /**
  * FIXED SCALE DRAWING: 4-second absolute window.
@@ -10,7 +9,7 @@ const drawEnvelope = (ctx, adsr, width, height, hoveredParam, dpr) => {
   ctx.resetTransform();
   ctx.scale(dpr, dpr);
 
-  ctx.fillStyle = '#030712';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
   ctx.fillRect(0, 0, width, height);
 
   // 2. Padding logic to ensure nodes don't clip at edges
@@ -23,7 +22,7 @@ const drawEnvelope = (ctx, adsr, width, height, hoveredParam, dpr) => {
   const tScale = drawW / VISIBLE_DURATION;
 
   // 3. Draw Time Grid (1s intervals)
-  ctx.strokeStyle = '#1e293b';
+  ctx.strokeStyle = 'rgba(71, 85, 105, 0.3)';
   ctx.setLineDash([4, 4]);
   ctx.lineWidth = 1;
   for (let i = 1; i < VISIBLE_DURATION; i++) {
@@ -34,6 +33,15 @@ const drawEnvelope = (ctx, adsr, width, height, hoveredParam, dpr) => {
     ctx.stroke();
   }
   ctx.setLineDash([]);
+
+  // Draw time labels
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+  for (let i = 0; i <= VISIBLE_DURATION; i++) {
+    const x = paddingX + i * tScale;
+    ctx.fillText(`${i}s`, x, height - 5);
+  }
 
   // 4. Calculate coordinates
   const sustainHoldTime = 0.5;
@@ -68,8 +76,8 @@ const drawEnvelope = (ctx, adsr, width, height, hoveredParam, dpr) => {
 
   // Fill
   const grad = ctx.createLinearGradient(0, paddingY, 0, height - paddingY);
-  grad.addColorStop(0, 'rgba(59, 130, 246, 0.25)');
-  grad.addColorStop(1, 'rgba(59, 130, 246, 0)');
+  grad.addColorStop(0, 'rgba(34, 211, 238, 0.25)');
+  grad.addColorStop(1, 'rgba(34, 211, 238, 0)');
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
@@ -78,7 +86,7 @@ const drawEnvelope = (ctx, adsr, width, height, hoveredParam, dpr) => {
   ctx.fill();
 
   // Stroke
-  ctx.strokeStyle = '#3b82f6';
+  ctx.strokeStyle = '#22d3ee';
   ctx.lineWidth = 3;
   ctx.lineJoin = 'round';
   ctx.beginPath();
@@ -155,7 +163,7 @@ const CircularKnob = memo(
 
     return (
       <div
-        className="flex flex-col items-center gap-3"
+        className="flex flex-col items-center gap-2"
         onMouseEnter={() => onHover(id)}
         onMouseLeave={() => onHover(null)}
       >
@@ -166,7 +174,7 @@ const CircularKnob = memo(
               cy="50"
               r={radius}
               fill="none"
-              stroke="#1e293b"
+              stroke="rgba(30, 41, 59, 0.8)"
               strokeWidth="10"
               strokeDasharray={`${arcLen} ${circum}`}
               strokeLinecap="round"
@@ -185,10 +193,10 @@ const CircularKnob = memo(
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span ref={textRef} className="text-white font-mono text-[10px] font-bold" />
+            <span ref={textRef} className="text-white font-mono text-xs font-medium" />
           </div>
         </div>
-        <span className="text-[9px] font-bold uppercase tracking-tighter text-slate-500">
+        <span className="text-[10px] font-semibold uppercase tracking-tight text-gray-400">
           {label}
         </span>
       </div>
@@ -241,23 +249,16 @@ export default function ADSREnvelope({ adsr, setAdsr }) {
   };
 
   return (
-    <div className="p-6 bg-slate-900 rounded-2xl border border-slate-800 w-full max-w-[600px] shadow-2xl">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2">
-          <Zap className="text-blue-500" size={18} />
-          <h2 className="text-white font-bold text-sm uppercase tracking-widest">ADSR Display</h2>
-        </div>
-        <div className="flex items-center gap-2 text-slate-600 text-[9px] font-bold uppercase">
-          <Clock size={10} />
-          <span>4.0s Horizon</span>
-        </div>
+    <div className="p-5 bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg border border-gray-700 w-full max-w-[600px] shadow-xl">
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-gray-300 font-semibold text-sm">ADSR</h2>
       </div>
 
-      <div className="relative w-full h-40 bg-black rounded-lg overflow-hidden border border-slate-800 mb-8">
+      <div className="relative w-full h-40 bg-black rounded-lg overflow-hidden border border-gray-700 mb-6">
         <canvas ref={canvasRef} className="w-full h-full block" />
       </div>
 
-      <div className="flex justify-around mb-8">
+      <div className="flex justify-around mb-6">
         {[
           { id: 'attack', label: 'Attack', color: '#ef4444', max: 2 },
           { id: 'decay', label: 'Decay', color: '#f59e0b', max: 2 },
@@ -276,12 +277,12 @@ export default function ADSREnvelope({ adsr, setAdsr }) {
         ))}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         {Object.keys(presets).map((name) => (
           <button
             key={name}
             onClick={() => setAdsr(presets[name])}
-            className="px-3 py-1.5 bg-slate-800 text-slate-400 text-[9px] font-bold uppercase rounded hover:bg-slate-700 transition-colors"
+            className="px-3 py-1.5 bg-gray-800 text-gray-400 text-[10px] font-semibold rounded hover:bg-gray-700 transition-colors border border-gray-700"
           >
             {name}
           </button>
