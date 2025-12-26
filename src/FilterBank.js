@@ -32,27 +32,32 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
   const curvePath = useMemo(() => {
     const width = 300;
     const height = 100;
-    // Logarithmic frequency mapping for the X-axis visual
-    const freqX = (Math.log10(filter.frequency / 20) / Math.log10(20000 / 20)) * width;
-    const qHeight = Math.min(height * 0.8, (filter.Q / 30) * height * 1.5);
+    const points = [];
+    const f_c = filter.frequency;
+    const Q = filter.Q;
 
-    if (filter.type === 'lowpass') {
-      return `M 0 50 L ${freqX - 30} 50 Q ${freqX} 50, ${freqX} ${50 - qHeight} Q ${freqX} 100, ${
-        freqX + 70
-      } 100 L ${width} 100`;
-    } else if (filter.type === 'highpass') {
-      return `M 0 100 L ${freqX - 70} 100 Q ${freqX} 100, ${freqX} ${50 - qHeight} Q ${freqX} 50, ${
-        freqX + 30
-      } 50 L ${width} 50`;
-    } else if (filter.type === 'bandpass') {
-      return `M 0 100 L ${freqX - 45} 100 Q ${freqX} 100, ${freqX} ${
-        50 - qHeight
-      } Q ${freqX} 100, ${freqX + 45} 100 L ${width} 100`;
-    } else {
-      return `M 0 50 L ${freqX - 25} 50 Q ${freqX} 50, ${freqX} 95 Q ${freqX} 50, ${
-        freqX + 25
-      } 50 L ${width} 50`;
+    for (let x = 0; x <= width; x += 2) {
+      const f = 20 * Math.pow(1000, x / width);
+      const ratio = f / f_c;
+      let mag = 0;
+
+      if (filter.type === 'lowpass') {
+        mag = 1 / Math.sqrt(Math.pow(1 - ratio * ratio, 2) + Math.pow(ratio / Q, 2));
+      } else if (filter.type === 'highpass') {
+        mag = (ratio * ratio) / Math.sqrt(Math.pow(1 - ratio * ratio, 2) + Math.pow(ratio / Q, 2));
+      } else if (filter.type === 'bandpass') {
+        mag = ratio / Q / Math.sqrt(Math.pow(1 - ratio * ratio, 2) + Math.pow(ratio / Q, 2));
+      } else if (filter.type === 'notch') {
+        mag =
+          Math.abs(1 - ratio * ratio) /
+          Math.sqrt(Math.pow(1 - ratio * ratio, 2) + Math.pow(ratio / Q, 2));
+      }
+
+      const db = 20 * Math.log10(Math.max(mag, 0.01));
+      const y = 50 - db * 1.5;
+      points.push(`${x},${Math.max(0, Math.min(height, y))}`);
     }
+    return `M ${points.join(' L ')}`;
   }, [filter.frequency, filter.Q, filter.type]);
 
   return (
