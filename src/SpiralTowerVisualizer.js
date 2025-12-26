@@ -21,29 +21,26 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
     return `hsla(${hue}, 80%, 60%, ${alpha})`;
   };
 
-  useEffect(() => {
-    const handleMouseDown = (e) => {
-      isDragging.current = true;
-      lastMousePos.current = { x: e.clientX, y: e.clientY };
-    };
-    const handleMouseMove = (e) => {
+  const handleMouseDown = (e) => {
+    isDragging.current = true;
+    lastMousePos.current = { x: e.clientX, y: e.clientY };
+
+    const handleMouseMove = (moveEvent) => {
       if (!isDragging.current) return;
-      velocity.current.x = (e.clientX - lastMousePos.current.x) * 0.01;
-      velocity.current.y = (e.clientY - lastMousePos.current.y) * 0.01;
-      lastMousePos.current = { x: e.clientX, y: e.clientY };
+      velocity.current.x = (moveEvent.clientX - lastMousePos.current.x) * 0.01;
+      velocity.current.y = (moveEvent.clientY - lastMousePos.current.y) * 0.01;
+      lastMousePos.current = { x: moveEvent.clientX, y: moveEvent.clientY };
     };
+
     const handleMouseUp = () => {
       isDragging.current = false;
-    };
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -84,19 +81,17 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         const zNew = y * cosP + z * sinP;
 
         const zFinal = zNew + 800;
-        if (zFinal <= 10) return null; // Avoid division by zero and very close objects
+        if (zFinal <= 10) return null;
 
         const factor = perspective / (perspective + zFinal);
         const px = centerX + x * factor;
         const py = centerY + yNew * factor;
 
-        // Final safety check for Canvas API
         if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
 
         return { px, py, scale: factor, zDepth: zNew, isFront: zNew < 0 };
       };
 
-      // 1. DATA PREP
       const now = Date.now();
       const allActive = [...heldNotes, ...releasedNotes.filter((n) => now - n.time < releaseTime)];
       const currentPoints = allActive
@@ -107,7 +102,6 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         })
         .filter((p) => p !== null);
 
-      // 2. WHITE RIBS
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
       ctx.lineWidth = 1;
       for (let d = 0; d < divisions; d++) {
@@ -136,10 +130,8 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         }
       };
 
-      // 3. BACK HELIX
       drawHelixPass(false);
 
-      // 4. TEXTURED CRYSTAL (With Non-Finite Safety)
       if (currentPoints.length >= 3) {
         for (let i = 0; i < currentPoints.length; i++) {
           for (let j = i + 1; j < currentPoints.length; j++) {
@@ -148,7 +140,6 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
               const p2 = currentPoints[j];
               const p3 = currentPoints[k];
 
-              // Ensure points aren't identical to avoid zero-width gradients
               if (Math.abs(p1.px - p3.px) < 0.1 && Math.abs(p1.py - p3.py) < 0.1) continue;
 
               ctx.beginPath();
@@ -160,10 +151,8 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
               try {
                 const grad = ctx.createLinearGradient(p1.px, p1.py, p3.px, p3.py);
                 const avgZ = (p1.zDepth + p2.zDepth + p3.zDepth) / 3;
-
-                // Texture colors
                 const opacity = avgZ < 0 ? 0.18 : 0.06;
-                const highlight = Math.sin(rotationRef.current + i) * 0.5 + 0.5; // Shimmer effect
+                const highlight = Math.sin(rotationRef.current + i) * 0.5 + 0.5;
 
                 grad.addColorStop(0, `rgba(200, 230, 255, ${opacity})`);
                 grad.addColorStop(0.5 + highlight * 0.2, `rgba(255, 255, 255, ${opacity * 2})`);
@@ -175,7 +164,6 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
                 ctx.lineWidth = 0.5;
                 ctx.stroke();
               } catch (e) {
-                // Fallback if gradient still fails
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
                 ctx.fill();
               }
@@ -184,7 +172,6 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         }
       }
 
-      // 5. ACTIVE NOTES
       currentPoints.forEach((p) => {
         ctx.shadowBlur = 20;
         ctx.shadowColor = p.color;
@@ -199,7 +186,6 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
         ctx.shadowBlur = 0;
       });
 
-      // 6. FRONT HELIX
       drawHelixPass(true);
 
       animationFrameRef.current = requestAnimationFrame(render);
@@ -214,7 +200,7 @@ const SpiralTowerVisualizer = ({ config, heldNotes, releasedNotes }) => {
       ref={canvasRef}
       width={width}
       height={height}
-      /* Match the class names from PitchClassVisualizer */
+      onMouseDown={handleMouseDown}
       className="rounded-3xl border border-white/10 shadow-2xl"
     />
   );

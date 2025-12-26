@@ -640,7 +640,7 @@ ${warnings.map((w) => `  • ${w.message}`).join('\n')}`;
         >
           <div className="space-y-1 text-xs">
             <EffectStatus label="Filter" enabled={filter?.enabled} type={filter?.type} />
-            <EffectStatus label="Filter Envelope" enabled={!!filterEnv} />
+            {/* <EffectStatus label="Filter Envelope" enabled={!!filterEnv} /> */}
             <EffectStatus label="Reverb" enabled={reverb?.enabled} wet={reverb?.wet} />
           </div>
         </Section>
