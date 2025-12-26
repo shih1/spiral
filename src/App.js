@@ -185,24 +185,26 @@ function App() {
       <MixerPanel mixer={mixer} setMixer={setMixer} reverb={reverb} setReverb={setReverb} />
 
       {/* 3.5 Synth Controls Panel (ADSR, Waveform, Filter) */}
-      {showADSR && (
-        <div
-          className="flex gap-6 items-start flex-nowrap justify-center origin-top transition-transform"
-          style={{
-            transform: 'scale(0.8)',
-            width: '125%' /* 1 / 0.8 = 1.25 to compensate for scale shrinkage */,
-            margin: '0 -12.5%' /* Centers the wider-than-parent container */,
-          }}
-        >
-          <div className="flex gap-6 items-start flex-wrap justify-center">
-            <ADSREnvelope adsr={adsr} setAdsr={setAdsr} />
-            <WaveformSelector waveform={waveform} setWaveform={setWaveform} />
-            <FilterBank filter={filter} setFilter={setFilter} />
-            <FilterEnvelope filterEnv={filterEnv} setFilterEnv={setFilterEnv} />
-            <UnisonControl unison={unison} setUnison={setUnison} />
-          </div>
+      <div
+        className={`flex gap-6 items-start flex-nowrap justify-center origin-top transition-all duration-500 ease-in-out mt-8 ${
+          showADSR
+            ? 'opacity-100 max-h-[500px] pointer-events-auto'
+            : 'opacity-0 max-h-0 pointer-events-none'
+        }`}
+        style={{
+          transform: showADSR ? 'scale(0.8) translateY(0)' : 'scale(0.7) translateY(-20px)',
+          width: '125%',
+          margin: '0 -12.5%',
+        }}
+      >
+        <div className="flex gap-6 items-start flex-nowrap justify-center">
+          <ADSREnvelope adsr={adsr} setAdsr={setAdsr} />
+          <WaveformSelector waveform={waveform} setWaveform={setWaveform} />
+          <FilterBank filter={filter} setFilter={setFilter} />
+          <FilterEnvelope filterEnv={filterEnv} setFilterEnv={setFilterEnv} />
+          <UnisonControl unison={unison} setUnison={setUnison} />
         </div>
-      )}
+      </div>
       {/* 4. Main Visualization Area */}
       <div className="flex-1 flex items-center justify-center p-4 gap-8 overflow-auto">
         {/* Scaled to 85% and forced to horizontal center */}
