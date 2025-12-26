@@ -19,25 +19,27 @@ This document describes the modular hook architecture for the Microtonal Spiral 
       │             │ │  Controls   │ │   Space     │
       └─────────────┘ └─────────────┘ └─────────────┘
               │
-              │ (orchestrates these 5 hooks)
               │
-      ┌───────┴───────┬─────────┬─────────┬─────────┐
-      │               │         │         │         │
-      ▼               ▼         ▼         ▼         ▼
-┌──────────┐  ┌──────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-│  Audio   │  │  Reverb  │ │ Synth  │ │  Note  │ │ Pitch  │
-│ Context  │  │  Effect  │ │   FX   │ │ Life   │ │ Class  │
-│          │  │          │ │        │ │ cycle  │ │  Anim  │
-└──────────┘  └──────────┘ └────────┘ └────────┘ └────────┘
-    │             │           │           │
-    │             │           │           │
-    └─────────────┤           │           │
-                  │           │           │
-                  └───────────┼───────────┘
-                              │
-                   All depend on AudioContext
-
-                   NoteLifecycle also depends on SynthFX
+              ▼
+      ┌─────────────┐
+      │AudioContext │
+      └─────────────┘
+              │
+              ├─────────────────┬─────────────────┐
+              │                 │                 │
+              ▼                 ▼                 ▼
+      ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+      │ReverbEffect │   │  SynthFX    │   │ PitchClass  │
+      │             │   │             │   │    Anim     │
+      └─────────────┘   └─────────────┘   └─────────────┘
+              │                 │
+              └────────┬────────┘
+                       │
+                       ▼
+               ┌─────────────┐
+               │    Note     │
+               │  Lifecycle  │
+               └─────────────┘
 ```
 
 ---
