@@ -73,31 +73,31 @@ const PerformanceMonitor = ({
     const lastChange = oscillatorsStuck ? metrics.lastOscillatorChange : Date.now();
     prevOscillatorCount.current = oscCount;
 
-    console.group('🎵 Audio Engine Status');
-    console.log('Active Oscillators:', oscCount);
-    console.log('Unison Voices per Osc:', unison?.voices || 1);
-    console.log('TOTAL VOICES:', totalVoices);
-    console.log('Active Pitch Classes:', activePitchClasses.length);
-    console.log('Held Notes:', heldNotes.length);
-    console.log('Released Notes:', releasedNotes.length);
-    console.log('Oscillators Object Keys:', Object.keys(activeOscillators));
+    // console.group('🎵 Audio Engine Status');
+    // console.log('Active Oscillators:', oscCount);
+    // console.log('Unison Voices per Osc:', unison?.voices || 1);
+    // console.log('TOTAL VOICES:', totalVoices);
+    // console.log('Active Pitch Classes:', activePitchClasses.length);
+    // console.log('Held Notes:', heldNotes.length);
+    // console.log('Released Notes:', releasedNotes.length);
+    // console.log('Oscillators Object Keys:', Object.keys(activeOscillators));
 
-    // Check for crash conditions
-    if (audioContext) {
-      console.log('AudioContext State:', audioContext.state);
-      console.log('AudioContext Current Time:', audioContext.currentTime);
+    // // Check for crash conditions
+    // if (audioContext) {
+    //   console.log('AudioContext State:', audioContext.state);
+    //   console.log('AudioContext Current Time:', audioContext.currentTime);
 
-      // Check if oscillators exist but aren't in the object
-      if (heldNotes.length > 0 && oscCount === 0) {
-        console.error('🔴 MISMATCH: Held notes exist but no oscillators in state!');
-      }
+    //   // Check if oscillators exist but aren't in the object
+    //   if (heldNotes.length > 0 && oscCount === 0) {
+    //     console.error('🔴 MISMATCH: Held notes exist but no oscillators in state!');
+    //   }
 
-      // Detect if audio context is suspended/closed
-      if (audioContext.state === 'suspended' || audioContext.state === 'closed') {
-        console.error('🔴 AUDIO CONTEXT CRASHED! State:', audioContext.state);
-      }
-    }
-    console.groupEnd();
+    //   // Detect if audio context is suspended/closed
+    //   if (audioContext.state === 'suspended' || audioContext.state === 'closed') {
+    //     console.error('🔴 AUDIO CONTEXT CRASHED! State:', audioContext.state);
+    //   }
+    // }
+    // console.groupEnd();
 
     setMetrics((prev) => ({
       ...prev,
