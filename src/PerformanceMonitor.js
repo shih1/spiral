@@ -511,7 +511,7 @@ ${warnings.map((w) => `  • ${w.message}`).join('\n')}`;
         <div className="bg-red-900/30 border-b border-red-800 p-3 animate-pulse">
           <div className="flex items-center gap-2 text-red-300 font-semibold text-sm">
             <AlertTriangle size={16} />
-            PERFORMANCE CRITICAL - Action Required!
+            CRITICAL!
           </div>
         </div>
       )}
