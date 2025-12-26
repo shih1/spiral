@@ -183,8 +183,8 @@ const SpiralKeyboard = ({
       const canvas = canvasRef.current;
       if (!canvas) return null;
       const rect = canvas.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
+      const x = (clientX - rect.left) * (canvas.width / rect.width);
+      const y = (clientY - rect.top) * (canvas.height / rect.height);
 
       for (const note of calculatedNotes) {
         const dx = x - note.x;
