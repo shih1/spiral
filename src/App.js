@@ -186,7 +186,14 @@ function App() {
 
       {/* 3.5 Synth Controls Panel (ADSR, Waveform, Filter) */}
       {showADSR && (
-        <div className="p-4 flex justify-center bg-gray-900/50 border-b border-gray-700">
+        <div
+          className="flex gap-6 items-start flex-nowrap justify-center origin-top transition-transform"
+          style={{
+            transform: 'scale(0.8)',
+            width: '125%' /* 1 / 0.8 = 1.25 to compensate for scale shrinkage */,
+            margin: '0 -12.5%' /* Centers the wider-than-parent container */,
+          }}
+        >
           <div className="flex gap-6 items-start flex-wrap justify-center">
             <ADSREnvelope adsr={adsr} setAdsr={setAdsr} />
             <WaveformSelector waveform={waveform} setWaveform={setWaveform} />
@@ -196,11 +203,17 @@ function App() {
           </div>
         </div>
       )}
-
       {/* 4. Main Visualization Area */}
       <div className="flex-1 flex items-center justify-center p-4 gap-8 overflow-auto">
-        {/* All three components in one horizontal flexbox */}
-        <div className="flex gap-6 items-start">
+        {/* Scaled to 85% and centered using negative margins */}
+        <div
+          className="flex gap-6 items-start origin-center transition-transform"
+          style={{
+            transform: 'scale(0.85)',
+            width: '117.6%',
+            margin: '0 -8.8%',
+          }}
+        >
           {/* Left: The Interactive Keyboard */}
           <SpiralKeyboard
             config={config}
