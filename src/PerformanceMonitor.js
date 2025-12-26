@@ -588,12 +588,12 @@ ${warnings.map((w) => `  • ${w.message}`).join('\n')}`;
 
           <MetricRow label="Active Pitch Classes" value={metrics.activePitchClassCount} />
 
-          <MetricRow
+          {/* <MetricRow
             label="🔍 Analyser Status"
             value={metrics.analyserFrozen ? 'FROZEN' : 'Active'}
             critical={metrics.analyserFrozen}
             info={metrics.analyserFrozen ? 'No audio signal!' : ''}
-          />
+          /> */}
 
           <MetricRow
             label="👻 Ghost Oscillators"
@@ -671,7 +671,7 @@ ${warnings.map((w) => `  • ${w.message}`).join('\n')}`;
         )}
 
         {/* Recommendations */}
-        <Section
+        {/* <Section
           title="💡 Optimization Tips"
           expanded={expandedSections.recommendations}
           onToggle={() => toggleSection('recommendations')}
@@ -688,7 +688,7 @@ ${warnings.map((w) => `  • ${w.message}`).join('\n')}`;
             <Tip>🔴 When creating unison voices, add each one to the oscillators object</Tip>
             <Tip>🔴 Example: oscillators[noteId + '_voice_' + i] = oscillatorNode</Tip>
           </div>
-        </Section>
+        </Section> */}
       </div>
 
       {/* Performance Tips */}
