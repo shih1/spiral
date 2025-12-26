@@ -2,42 +2,67 @@ import React from 'react';
 
 const Instructions = () => {
   return (
-    <div className="p-4 bg-gray-900 border-t border-gray-800 text-white text-sm">
-      <p>
-        <strong>How to use:</strong>
-      </p>
-      <ul className="list-disc list-inside mt-2 space-y-1">
-        <li>
-          <strong>Interactive Spiral:</strong> Click or tap keys to play notes. Drag your mouse or
-          finger across the keys to "glide" between notes.
-        </li>
-        <li>
-          <strong>Keyboard Controls:</strong> Play with your computer keyboard using the reference
-          map at the bottom. The bottom rows (Z-/) handle lower octaves, while upper rows (Q-P)
-          handle higher octaves.
-        </li>
-        <li>
-          <strong>3D Visualizer:</strong> Switch between 2D and 3D visualization modes. Click and
-          drag on the 3D Tower to rotate and inspect the harmonic structure.
-        </li>
-        <li>
-          <strong>Microtonal Presets:</strong> Use the Settings panel to explore 12, 19, 24, 31, or
-          53-TET (Equal Temperament) tuning systems.
-        </li>
-        <li>
-          <strong>Chord Detection:</strong> The 2D Visualizer automatically detects and labels
-          complex chords based on an expanded library.
-        </li>
-        <li>
-          <strong>Mixer & Reverb:</strong> Use the Mixer panel to adjust master volume, toggle mute,
-          or control reverb wetness and decay for a spacious sound.
-        </li>
-        <li>
-          <strong>Visual Feedback:</strong> Active notes pulse and shimmer. Pitch classes are
-          highlighted with green lines, and trailing "released" notes fade based on your Release
-          Time setting.
-        </li>
-      </ul>
+    <div className="p-6 bg-gray-950 border-t border-gray-800 text-gray-300 text-xs leading-relaxed">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Concept Section */}
+        <div>
+          <h3 className="text-white font-semibold mb-2 uppercase tracking-wider">
+            Musical Frontier
+          </h3>
+          <p className="mb-4">
+            This project is the culmination of years of global travel and a desire to bridge the gap
+            between Western musical foundations and the vast world of non-Western and historical
+            scales. By dividing the octave into different numbers of equal steps (N-TET), we
+            rediscover lost intervals and cross-cultural harmonies.
+          </p>
+          <div className="grid grid-cols-1 gap-1">
+            <p>
+              <strong className="text-white">12-TET:</strong> Modern Western standard.
+            </p>
+            <p>
+              <strong className="text-white">19-TET:</strong> Renaissance-adjacent tuning with
+              improved thirds.
+            </p>
+            <p>
+              <strong className="text-white">24-TET:</strong> Quarter-tones essential for Arabic
+              Maqam.
+            </p>
+            <p>
+              <strong className="text-white">31-TET:</strong> The lost temperament of the
+              Renaissance and early Baroque.
+            </p>
+            <p>
+              <strong className="text-white">53-TET:</strong> Precision for Turkish Makam and Indian
+              Raga nuances.
+            </p>
+          </div>
+        </div>
+
+        {/* Technical Section */}
+        <div>
+          <h3 className="text-white font-semibold mb-2 uppercase tracking-wider">Quick Start</h3>
+          <ul className="space-y-2">
+            <li>
+              <strong className="text-white">Interaction:</strong> Click/tap keys or drag across the
+              spiral for a microtonal glissando.
+            </li>
+            <li>
+              <strong className="text-white">Keyboard Map:</strong> Reference the Keyboard
+              Visualizer below for real-time key assignments (Z-/ for lower octaves, Q-P for
+              higher).
+            </li>
+            <li>
+              <strong className="text-white">Sound Design:</strong> Use Synth Controls to adjust
+              Unison voice stacking, Filters, ADSR, and Wavetable morphing.
+            </li>
+            <li>
+              <strong className="text-white">Visuals:</strong> Toggle 2D Circle for chord geometry
+              or 3D Tower for vertical harmonic structure.
+            </li>
+          </ul>
+          <p className="mt-4 font-medium text-blue-400 uppercase tracking-widest">Please enjoy.</p>
+        </div>
+      </div>
     </div>
   );
 };
