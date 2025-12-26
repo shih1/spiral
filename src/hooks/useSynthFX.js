@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react';
 
 /**
  * Manages all synth effects: waveform morphing, filter, drive/saturation, and unison
+ * OPTIMIZED VERSION - reduces redundant updates and batches parameter changes
  */
 export const useSynthFX = (
   audioContext,
@@ -13,6 +14,15 @@ export const useSynthFX = (
 ) => {
   const activeFiltersMapRef = useRef(new Map());
   const activeDriveMapRef = useRef(new Map());
+
+  // Cache the current filter settings to avoid redundant updates
+  const lastFilterSettingsRef = useRef({});
+  const lastDriveSettingRef = useRef(null);
+  const lastUnisonSettingsRef = useRef({});
+
+  // Throttle filter updates to avoid excessive calls
+  const filterUpdateTimeoutRef = useRef(null);
+  const unisonUpdateTimeoutRef = useRef(null);
 
   // Create PeriodicWave for morphing between waveforms
   const createMorphedWave = useCallback(
@@ -98,6 +108,59 @@ export const useSynthFX = (
     return curve;
   }, []);
 
+  // Batch update filter nodes - only update what changed
+  const updateFilterNodes = useCallback(
+    (filterSettings, now) => {
+      if (!audioContext) return;
+
+      const last = lastFilterSettingsRef.current;
+      const typeChanged = last.type !== filterSettings.type;
+      const freqChanged = last.frequency !== filterSettings.frequency;
+      const qChanged = last.Q !== filterSettings.Q;
+      const gainChanged = last.gain !== filterSettings.gain;
+
+      // Skip if nothing changed
+      if (!typeChanged && !freqChanged && !qChanged && !gainChanged) {
+        return;
+      }
+
+      // Single loop through all filters, only updating changed parameters
+      activeFiltersMapRef.current.forEach((filterNode) => {
+        try {
+          if (typeChanged) {
+            filterNode.type = filterSettings.type;
+          }
+
+          if (freqChanged) {
+            filterNode.frequency.cancelScheduledValues(now);
+            filterNode.frequency.setValueAtTime(filterNode.frequency.value, now);
+            filterNode.frequency.exponentialRampToValueAtTime(
+              Math.max(20, filterSettings.frequency),
+              now + 0.02
+            );
+          }
+
+          if (qChanged) {
+            filterNode.Q.cancelScheduledValues(now);
+            filterNode.Q.setValueAtTime(filterNode.Q.value, now);
+            filterNode.Q.linearRampToValueAtTime(filterSettings.Q, now + 0.02);
+          }
+
+          if (gainChanged && filterNode.gain) {
+            filterNode.gain.cancelScheduledValues(now);
+            filterNode.gain.setValueAtTime(filterNode.gain.value, now);
+            filterNode.gain.linearRampToValueAtTime(filterSettings.gain, now + 0.02);
+          }
+        } catch (e) {
+          // Filter might have been disconnected
+        }
+      });
+
+      lastFilterSettingsRef.current = { ...filterSettings };
+    },
+    [audioContext]
+  );
+
   // Update all active oscillators when waveform changes
   useEffect(() => {
     const periodicWave = createMorphedWave(waveform);
@@ -120,45 +183,51 @@ export const useSynthFX = (
     });
   }, [waveform, createMorphedWave, setActiveOscillators]);
 
-  // Update all active filters when filter settings change
+  // OPTIMIZED: Throttled filter updates
   useEffect(() => {
     if (!audioContext) return;
 
-    const now = audioContext.currentTime;
+    // Clear any pending update
+    if (filterUpdateTimeoutRef.current) {
+      clearTimeout(filterUpdateTimeoutRef.current);
+    }
 
-    activeFiltersMapRef.current.forEach((filterNode) => {
-      try {
-        filterNode.type = filter.type;
-        filterNode.frequency.cancelScheduledValues(now);
-        filterNode.frequency.setValueAtTime(filterNode.frequency.value, now);
-        filterNode.frequency.exponentialRampToValueAtTime(
-          Math.max(20, filter.frequency),
-          now + 0.02
-        );
+    // Throttle to avoid excessive updates during slider dragging
+    filterUpdateTimeoutRef.current = setTimeout(() => {
+      const now = audioContext.currentTime;
+      updateFilterNodes(
+        {
+          type: filter.type,
+          frequency: filter.frequency,
+          Q: filter.Q,
+          gain: filter.gain,
+        },
+        now
+      );
+    }, 16); // ~60fps throttle
 
-        filterNode.Q.cancelScheduledValues(now);
-        filterNode.Q.setValueAtTime(filterNode.Q.value, now);
-        filterNode.Q.linearRampToValueAtTime(filter.Q, now + 0.02);
-
-        if (filterNode.gain) {
-          filterNode.gain.cancelScheduledValues(now);
-          filterNode.gain.setValueAtTime(filterNode.gain.value, now);
-          filterNode.gain.linearRampToValueAtTime(filter.gain, now + 0.02);
-        }
-      } catch (e) {
-        // Filter might have been disconnected
+    return () => {
+      if (filterUpdateTimeoutRef.current) {
+        clearTimeout(filterUpdateTimeoutRef.current);
       }
-    });
-  }, [filter.type, filter.frequency, filter.Q, filter.gain, audioContext]);
+    };
+  }, [filter.type, filter.frequency, filter.Q, filter.gain, audioContext, updateFilterNodes]);
 
-  // Update all active drive nodes when drive/saturation changes
+  // OPTIMIZED: Update drive nodes only when drive actually changes
   useEffect(() => {
     if (!audioContext || !activeDriveMapRef.current) return;
 
-    // Generate the curve based on the module settings
-    const currentCurve = makeDistortionCurve(filter.enabled ? filter.drive : 0);
+    const currentDrive = filter.enabled ? filter.drive : 0;
 
-    // Update every active Drive node instantly
+    // Skip if drive hasn't changed
+    if (lastDriveSettingRef.current === currentDrive) {
+      return;
+    }
+
+    // Generate the curve once
+    const currentCurve = makeDistortionCurve(currentDrive);
+
+    // Update every active Drive node
     activeDriveMapRef.current.forEach((driveNode) => {
       try {
         if (driveNode) {
@@ -168,40 +237,71 @@ export const useSynthFX = (
         // Node might have been cleaned up
       }
     });
+
+    lastDriveSettingRef.current = currentDrive;
   }, [filter.drive, filter.enabled, audioContext, makeDistortionCurve]);
 
-  // Update unison settings for all active voices
+  // OPTIMIZED: Throttled unison updates
   useEffect(() => {
     if (!audioContext) return;
 
-    const now = audioContext.currentTime;
+    const last = lastUnisonSettingsRef.current;
+    const detuneChanged = last.detune !== unison.detune;
+    const blendChanged = last.blend !== unison.blend;
 
-    // Loop through all active notes
-    Object.values(activeOscillators).forEach((noteData) => {
-      if (!noteData.voices) return;
+    // Skip if nothing changed
+    if (!detuneChanged && !blendChanged) {
+      return;
+    }
 
-      const numVoices = noteData.voices.length;
-      const centerIndex = (numVoices - 1) / 2;
+    // Clear any pending update
+    if (unisonUpdateTimeoutRef.current) {
+      clearTimeout(unisonUpdateTimeoutRef.current);
+    }
 
-      noteData.voices.forEach((voice, i) => {
-        try {
-          const offset = numVoices > 1 ? (i - centerIndex) / centerIndex : 0;
-          const isMiddle = Math.abs(i - centerIndex) < 0.6;
+    // Throttle updates
+    unisonUpdateTimeoutRef.current = setTimeout(() => {
+      const now = audioContext.currentTime;
 
-          // Dynamic Detune Update
-          voice.oscillator.detune.setTargetAtTime(offset * unison.detune, now, 0.05);
+      // Loop through all active notes
+      Object.values(activeOscillators).forEach((noteData) => {
+        if (!noteData.voices) return;
 
-          // Dynamic Blend Update
-          const voiceLevel = isMiddle ? 1.0 : unison.blend;
-          voice.voiceGain.gain.setTargetAtTime(voiceLevel, now, 0.05);
+        const numVoices = noteData.voices.length;
+        const centerIndex = (numVoices - 1) / 2;
 
-          // Dynamic Pan Update
-          voice.panner.pan.setTargetAtTime(offset, now, 0.05);
-        } catch (e) {
-          // Voice might have been released during the loop
-        }
+        noteData.voices.forEach((voice, i) => {
+          try {
+            const offset = numVoices > 1 ? (i - centerIndex) / centerIndex : 0;
+            const isMiddle = Math.abs(i - centerIndex) < 0.6;
+
+            // Only update detune if it changed
+            if (detuneChanged) {
+              voice.oscillator.detune.setTargetAtTime(offset * unison.detune, now, 0.05);
+            }
+
+            // Only update blend if it changed
+            if (blendChanged) {
+              const voiceLevel = isMiddle ? 1.0 : unison.blend;
+              voice.voiceGain.gain.setTargetAtTime(voiceLevel, now, 0.05);
+            }
+
+            // Pan is constant, don't update it
+            // voice.panner.pan.setTargetAtTime(offset, now, 0.05);
+          } catch (e) {
+            // Voice might have been released during the loop
+          }
+        });
       });
-    });
+
+      lastUnisonSettingsRef.current = { detune: unison.detune, blend: unison.blend };
+    }, 16); // ~60fps throttle
+
+    return () => {
+      if (unisonUpdateTimeoutRef.current) {
+        clearTimeout(unisonUpdateTimeoutRef.current);
+      }
+    };
   }, [unison.detune, unison.blend, activeOscillators, audioContext]);
 
   return {
