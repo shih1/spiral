@@ -16,6 +16,7 @@ import WaveformSelector from './WaveformSelector';
 import FilterBank from './FilterBank';
 import FilterEnvelope from './FilterEnvelope';
 import UnisonControl from './UnisonControl';
+import StereoMasterMonitor from './StereoMasterMonitor';
 
 function App() {
   // UI State
@@ -114,7 +115,6 @@ function App() {
         heldNotes={heldNotes}
         releasedNotes={releasedNotes}
         activeOscillators={activeOscillators}
-        // Add these new props:
         audioContext={audioContext}
         analyser={analyser}
         unison={unison}
@@ -198,19 +198,20 @@ function App() {
       )}
 
       {/* 4. Main Visualization Area */}
-      <div className="flex-1 flex flex-col md:flex-row items-center justify-center p-4 gap-8 overflow-auto">
-        {/* Left Side: The Interactive Keyboard */}
-        <SpiralKeyboard
-          config={config}
-          activeNote={activeNote}
-          notes={notes}
-          setNotes={setNotes}
-          heldNotes={heldNotes}
-          onNoteClick={(note) => handleNotePlay(note, false)}
-        />
+      <div className="flex-1 flex items-center justify-center p-4 gap-8 overflow-auto">
+        {/* All three components in one horizontal flexbox */}
+        <div className="flex gap-6 items-start">
+          {/* Left: The Interactive Keyboard */}
+          <SpiralKeyboard
+            config={config}
+            activeNote={activeNote}
+            notes={notes}
+            setNotes={setNotes}
+            heldNotes={heldNotes}
+            onNoteClick={(note) => handleNotePlay(note, false)}
+          />
 
-        {/* Right Side: The Swappable Visualizer */}
-        <div className="flex flex-col gap-4">
+          {/* Center: The Swappable Visualizer */}
           {visualizationMode === '2D' ? (
             <PitchClassVisualizer
               config={config}
@@ -225,6 +226,9 @@ function App() {
               releasedNotes={releasedNotes}
             />
           )}
+
+          {/* Right: The Stereo Master Monitor (always visible) */}
+          <StereoMasterMonitor audioContext={audioContext} analyser={analyser} />
         </div>
       </div>
 
