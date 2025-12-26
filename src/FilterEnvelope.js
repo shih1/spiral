@@ -38,7 +38,7 @@ const FilterEnvelope = ({ filterEnv, setFilterEnv, className = '' }) => {
     >
       {/* HEADER SECTION */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-gray-300 font-semibold text-sm">Filter Envelope</h3>
+        <h3 className="text-gray-300 font-semibold text-sm">FILTER ENVELOPE</h3>
 
         <div className="flex gap-2">
           <button

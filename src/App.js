@@ -158,7 +158,7 @@ function App() {
             }`}
           >
             <Sliders size={18} />
-            <span className="text-sm font-medium">Synth Controls</span>
+            <span className="text-sm font-medium">Sound Design</span>
           </button>
 
           <label className="flex items-center text-white text-sm cursor-pointer hover:text-blue-300 transition-colors">

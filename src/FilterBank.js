@@ -61,7 +61,7 @@ const FilterBank = ({ filter, setFilter, className = '' }) => {
     >
       {/* Header with Power Toggle */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-gray-300 font-semibold text-sm">Filter</h3>
+        <h3 className="text-gray-300 font-semibold text-sm">FILTER</h3>
         <button
           onClick={() => handleChange('enabled', !filter.enabled)}
           className={`p-1.5 rounded transition-all ${
