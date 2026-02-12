@@ -5,11 +5,13 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const [mode, setMode] = useState('fft');
+  const [fftStyle, setFftStyle] = useState('beams');
   const lastFrameTimeRef = useRef(0);
   const TARGET_FPS = 60;
   const frameInterval = 1000 / TARGET_FPS;
 
   const peaksRef = useRef(new Float32Array(0));
+  const spectroscopeBufferRef = useRef(null);
 
   useEffect(() => {
     if (!analyserNode || !canvasRef.current || !audioContext) return;
@@ -135,67 +137,113 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
           ctx.fillText(f >= 1000 ? `${f / 1000}k` : f, x + 2, height - 10);
         });
 
-        const points = [];
-        for (let x = 0; x < activeWidth; x++) {
-          const logFreq = logMin + (x / activeWidth) * (logMax - logMin);
-          const freq = Math.pow(10, logFreq);
-          const binIndex = (freq / nyquist) * fftBufferLength;
-          const i = Math.floor(binIndex);
-          const fraction = binIndex - i;
+        const currentStyle = isSplit ? 'beams' : fftStyle;
 
-          // Better interpolation with boundary checking
-          let val;
-          if (i < fftBufferLength - 1) {
-            val = freqDataArray[i] * (1 - fraction) + freqDataArray[i + 1] * fraction;
-          } else if (i < fftBufferLength) {
-            val = freqDataArray[i];
-          } else {
-            val = 0;
+        if (currentStyle === 'beams') {
+          // BEAMS STYLE - Logarithmic bars
+          const totalBars = 200;
+          const logRange = logMax - logMin;
+          const logStep = logRange / totalBars;
+
+          for (let barIdx = 0; barIdx < totalBars; barIdx++) {
+            const logFreq = logMin + barIdx * logStep;
+            const freq = Math.pow(10, logFreq);
+            const nextLogFreq = logMin + (barIdx + 1) * logStep;
+
+            const x1 = ((logFreq - logMin) / logRange) * activeWidth;
+            const x2 = ((nextLogFreq - logMin) / logRange) * activeWidth;
+            const barWidth = Math.max(1, x2 - x1 - 0.5);
+
+            const binIndex = (freq / nyquist) * fftBufferLength;
+            const i = Math.floor(binIndex);
+            const fraction = binIndex - i;
+
+            let val;
+            if (i < fftBufferLength - 1) {
+              val = freqDataArray[i] * (1 - fraction) + freqDataArray[i + 1] * fraction;
+            } else if (i < fftBufferLength) {
+              val = freqDataArray[i];
+            } else {
+              val = 0;
+            }
+
+            if (freq < 200 && barIdx > 0) {
+              val = val * 0.8 + val * 0.2;
+            }
+
+            const intensity = val / 255;
+
+            const barGrad = ctx.createLinearGradient(0, height, 0, 0);
+            barGrad.addColorStop(0, `rgba(0, 251, 255, ${intensity * 0.6})`);
+            barGrad.addColorStop(0.5, `rgba(0, 251, 255, ${intensity * 0.8})`);
+            barGrad.addColorStop(1, `rgba(0, 251, 255, ${intensity})`);
+
+            ctx.fillStyle = barGrad;
+            ctx.fillRect(xOffset + x1, 0, barWidth, height);
+          }
+        } else {
+          // CLASSIC STYLE - Line graph
+          const points = [];
+          for (let x = 0; x < activeWidth; x++) {
+            const logFreq = logMin + (x / activeWidth) * (logMax - logMin);
+            const freq = Math.pow(10, logFreq);
+            const binIndex = (freq / nyquist) * fftBufferLength;
+            const i = Math.floor(binIndex);
+            const fraction = binIndex - i;
+
+            let val;
+            if (i < fftBufferLength - 1) {
+              val = freqDataArray[i] * (1 - fraction) + freqDataArray[i + 1] * fraction;
+            } else if (i < fftBufferLength) {
+              val = freqDataArray[i];
+            } else {
+              val = 0;
+            }
+
+            if (freq < 200 && x > 0) {
+              const prevPoint = points[x - 1];
+              val = val * 0.7 + (prevPoint ? ((height - prevPoint.y) / height) * 255 : val) * 0.3;
+            }
+
+            const y = height - (val / 255) * height;
+            points.push({ x: xOffset + x, y });
+
+            const peakIdx = isSplit ? x + Math.floor(width / 2) : x;
+            if (y < peaksRef.current[peakIdx] || peaksRef.current[peakIdx] === 0) {
+              peaksRef.current[peakIdx] = y;
+            } else {
+              peaksRef.current[peakIdx] += 0.75;
+            }
           }
 
-          // Additional smoothing for low frequencies (below 200 Hz)
-          if (freq < 200 && x > 0) {
-            const prevPoint = points[x - 1];
-            val = val * 0.7 + (prevPoint ? ((height - prevPoint.y) / height) * 255 : val) * 0.3;
-          }
+          // Draw filled area
+          const fillGrad = ctx.createLinearGradient(0, 0, 0, height);
+          fillGrad.addColorStop(0, 'rgba(0, 251, 255, 0.15)');
+          fillGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.beginPath();
+          ctx.moveTo(points[0].x, height);
+          points.forEach((p) => ctx.lineTo(p.x, p.y));
+          ctx.lineTo(points[points.length - 1].x, height);
+          ctx.fillStyle = fillGrad;
+          ctx.fill();
 
-          const y = height - (val / 255) * height;
-          points.push({ x: xOffset + x, y });
+          // Draw line
+          ctx.strokeStyle = '#00fbff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+          ctx.stroke();
 
-          const peakIdx = isSplit ? x + Math.floor(width / 2) : x;
-          if (y < peaksRef.current[peakIdx] || peaksRef.current[peakIdx] === 0) {
-            peaksRef.current[peakIdx] = y;
-          } else {
-            peaksRef.current[peakIdx] += 0.75;
+          // Draw peaks
+          ctx.strokeStyle = 'rgba(0, 251, 255, 0.3)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let x = 0; x < activeWidth; x++) {
+            const peakIdx = isSplit ? x + Math.floor(width / 2) : x;
+            ctx.lineTo(xOffset + x, peaksRef.current[peakIdx]);
           }
+          ctx.stroke();
         }
-
-        // FFT Visuals
-        const fillGrad = ctx.createLinearGradient(0, 0, 0, height);
-        fillGrad.addColorStop(0, 'rgba(0, 251, 255, 0.15)');
-        fillGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, height);
-        points.forEach((p) => ctx.lineTo(p.x, p.y));
-        ctx.lineTo(points[points.length - 1].x, height);
-        ctx.fillStyle = fillGrad;
-        ctx.fill();
-
-        ctx.strokeStyle = '#00fbff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-        ctx.stroke();
-
-        // Peaks
-        ctx.strokeStyle = 'rgba(0, 251, 255, 0.3)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let x = 0; x < activeWidth; x++) {
-          const peakIdx = isSplit ? x + Math.floor(width / 2) : x;
-          ctx.lineTo(xOffset + x, peaksRef.current[peakIdx]);
-        }
-        ctx.stroke();
 
         if (isSplit) {
           // Vertical Divider
@@ -216,7 +264,7 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
       scopeAnalyser.disconnect();
       fftAnalyser.disconnect();
     };
-  }, [analyserNode, audioContext, mode]);
+  }, [analyserNode, audioContext, mode, fftStyle]);
 
   return (
     <div className="bg-gray-950 rounded-xl p-4 border border-white/10 shadow-2xl">
@@ -232,18 +280,35 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
             </p>
           </div>
         </div>
-        <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
-          {['oscilloscope', 'fft', 'split'].map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
-                mode === m ? 'bg-cyan-500 text-black shadow-lg' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
+        <div className="flex gap-2">
+          <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
+            {['oscilloscope', 'fft', 'split'].map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                  mode === m ? 'bg-cyan-500 text-black shadow-lg' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          {mode === 'fft' && (
+            <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
+              {['classic', 'beams'].map((style) => (
+                <button
+                  key={style}
+                  onClick={() => setFftStyle(style)}
+                  className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                    fftStyle === style ? 'bg-cyan-500 text-black shadow-lg' : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {style}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       <canvas
