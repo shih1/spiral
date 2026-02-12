@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Activity, BarChart3 } from 'lucide-react';
+import WaveView from './WaveView';
 
 const AudioVisualizer = ({ analyserNode, audioContext }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const [mode, setMode] = useState('fft');
   const [fftStyle, setFftStyle] = useState('beams');
+  const [spectroscopeMode, setSpectroscopeMode] = useState('3d');
   const lastFrameTimeRef = useRef(0);
   const TARGET_FPS = 60;
   const frameInterval = 1000 / TARGET_FPS;
 
   const peaksRef = useRef(new Float32Array(0));
-  const spectroscopeBufferRef = useRef(null);
 
   useEffect(() => {
     if (!analyserNode || !canvasRef.current || !audioContext) return;
@@ -139,86 +140,8 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
 
         const currentStyle = isSplit ? 'beams' : fftStyle;
 
-        if (currentStyle === 'spectroscope') {
-          // 3D SPECTROSCOPE STYLE - Waterfall display
-          if (!spectroscopeBufferRef.current) {
-            spectroscopeBufferRef.current = ctx.createImageData(activeWidth, height);
-          }
-
-          const imageData = spectroscopeBufferRef.current;
-          const data = imageData.data;
-
-          // Shift existing data down by 1 pixel
-          for (let y = height - 1; y > 0; y--) {
-            for (let x = 0; x < activeWidth; x++) {
-              const srcIdx = ((y - 1) * activeWidth + x) * 4;
-              const dstIdx = (y * activeWidth + x) * 4;
-              data[dstIdx] = data[srcIdx];
-              data[dstIdx + 1] = data[srcIdx + 1];
-              data[dstIdx + 2] = data[srcIdx + 2];
-              data[dstIdx + 3] = 255;
-            }
-          }
-
-          // Draw new frequency data at the top
-          const totalBars = activeWidth;
-          const logRange = logMax - logMin;
-
-          for (let x = 0; x < totalBars; x++) {
-            const logFreq = logMin + (x / totalBars) * logRange;
-            const freq = Math.pow(10, logFreq);
-            const binIndex = (freq / nyquist) * fftBufferLength;
-            const i = Math.floor(binIndex);
-            const fraction = binIndex - i;
-
-            let val;
-            if (i < fftBufferLength - 1) {
-              val = freqDataArray[i] * (1 - fraction) + freqDataArray[i + 1] * fraction;
-            } else if (i < fftBufferLength) {
-              val = freqDataArray[i];
-            } else {
-              val = 0;
-            }
-
-            const intensity = val / 255;
-
-            // Color mapping: black -> blue -> cyan -> white
-            let r, g, b;
-            if (intensity < 0.25) {
-              // Black to blue
-              const t = intensity / 0.25;
-              r = 0;
-              g = 0;
-              b = Math.floor(t * 100);
-            } else if (intensity < 0.5) {
-              // Blue to cyan
-              const t = (intensity - 0.25) / 0.25;
-              r = 0;
-              g = Math.floor(t * 251);
-              b = Math.floor(100 + t * 155);
-            } else if (intensity < 0.75) {
-              // Cyan to white
-              const t = (intensity - 0.5) / 0.25;
-              r = Math.floor(t * 255);
-              g = 251;
-              b = 255;
-            } else {
-              // Bright white
-              const t = (intensity - 0.75) / 0.25;
-              r = 255;
-              g = 251 + Math.floor(t * 4);
-              b = 255;
-            }
-
-            const idx = x * 4;
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
-          }
-
-          ctx.putImageData(imageData, xOffset, 0);
-        } else if (currentStyle === 'beams') {
+        // Note: spectroscope rendering is handled by Spectroscope3D component
+        if (currentStyle === 'beams') {
           // BEAMS STYLE - Logarithmic bars
           const totalBars = 200;
           const logRange = logMax - logMin;
@@ -374,28 +297,57 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
             ))}
           </div>
           {mode === 'fft' && (
-            <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
-              {['classic', 'beams', 'spectroscope'].map((style) => (
-                <button
-                  key={style}
-                  onClick={() => setFftStyle(style)}
-                  className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
-                    fftStyle === style ? 'bg-cyan-500 text-black shadow-lg' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  {style}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
+                {[
+                  { value: 'classic', label: 'classic' },
+                  { value: 'beams', label: 'beams' },
+                  { value: 'spectroscope', label: 'wave' }
+                ].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => setFftStyle(value)}
+                    className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                      fftStyle === value ? 'bg-cyan-500 text-black shadow-lg' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {fftStyle === 'spectroscope' && (
+                <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
+                  {['2d', '3d'].map((dim) => (
+                    <button
+                      key={dim}
+                      onClick={() => setSpectroscopeMode(dim)}
+                      className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                        spectroscopeMode === dim ? 'bg-cyan-500 text-black shadow-lg' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {dim}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
-      <canvas
-        ref={canvasRef}
-        width={2048}
-        height={300}
-        className="w-full h-48 bg-black/20 rounded-lg border border-white/5"
-      />
+      {mode === 'fft' && fftStyle === 'spectroscope' ? (
+        <WaveView
+          analyserNode={analyserNode}
+          audioContext={audioContext}
+          mode={spectroscopeMode}
+        />
+      ) : (
+        <canvas
+          ref={canvasRef}
+          width={2048}
+          height={300}
+          className="w-full h-48 bg-black/20 rounded-lg border border-white/5"
+        />
+      )}
     </div>
   );
 };
