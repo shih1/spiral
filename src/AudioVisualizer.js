@@ -139,7 +139,86 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
 
         const currentStyle = isSplit ? 'beams' : fftStyle;
 
-        if (currentStyle === 'beams') {
+        if (currentStyle === 'spectroscope') {
+          // 3D SPECTROSCOPE STYLE - Waterfall display
+          if (!spectroscopeBufferRef.current) {
+            spectroscopeBufferRef.current = ctx.createImageData(activeWidth, height);
+          }
+
+          const imageData = spectroscopeBufferRef.current;
+          const data = imageData.data;
+
+          // Shift existing data down by 1 pixel
+          for (let y = height - 1; y > 0; y--) {
+            for (let x = 0; x < activeWidth; x++) {
+              const srcIdx = ((y - 1) * activeWidth + x) * 4;
+              const dstIdx = (y * activeWidth + x) * 4;
+              data[dstIdx] = data[srcIdx];
+              data[dstIdx + 1] = data[srcIdx + 1];
+              data[dstIdx + 2] = data[srcIdx + 2];
+              data[dstIdx + 3] = 255;
+            }
+          }
+
+          // Draw new frequency data at the top
+          const totalBars = activeWidth;
+          const logRange = logMax - logMin;
+
+          for (let x = 0; x < totalBars; x++) {
+            const logFreq = logMin + (x / totalBars) * logRange;
+            const freq = Math.pow(10, logFreq);
+            const binIndex = (freq / nyquist) * fftBufferLength;
+            const i = Math.floor(binIndex);
+            const fraction = binIndex - i;
+
+            let val;
+            if (i < fftBufferLength - 1) {
+              val = freqDataArray[i] * (1 - fraction) + freqDataArray[i + 1] * fraction;
+            } else if (i < fftBufferLength) {
+              val = freqDataArray[i];
+            } else {
+              val = 0;
+            }
+
+            const intensity = val / 255;
+
+            // Color mapping: black -> blue -> cyan -> white
+            let r, g, b;
+            if (intensity < 0.25) {
+              // Black to blue
+              const t = intensity / 0.25;
+              r = 0;
+              g = 0;
+              b = Math.floor(t * 100);
+            } else if (intensity < 0.5) {
+              // Blue to cyan
+              const t = (intensity - 0.25) / 0.25;
+              r = 0;
+              g = Math.floor(t * 251);
+              b = Math.floor(100 + t * 155);
+            } else if (intensity < 0.75) {
+              // Cyan to white
+              const t = (intensity - 0.5) / 0.25;
+              r = Math.floor(t * 255);
+              g = 251;
+              b = 255;
+            } else {
+              // Bright white
+              const t = (intensity - 0.75) / 0.25;
+              r = 255;
+              g = 251 + Math.floor(t * 4);
+              b = 255;
+            }
+
+            const idx = x * 4;
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 255;
+          }
+
+          ctx.putImageData(imageData, xOffset, 0);
+        } else if (currentStyle === 'beams') {
           // BEAMS STYLE - Logarithmic bars
           const totalBars = 200;
           const logRange = logMax - logMin;
@@ -296,7 +375,7 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
           </div>
           {mode === 'fft' && (
             <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
-              {['classic', 'beams'].map((style) => (
+              {['classic', 'beams', 'spectroscope'].map((style) => (
                 <button
                   key={style}
                   onClick={() => setFftStyle(style)}
