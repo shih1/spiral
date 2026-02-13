@@ -262,69 +262,46 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
 
         ctx.globalCompositeOperation = 'lighter'; // Additive blending for see-through effect
 
-        // Draw horizontal lines (frequency at each time)
-        for (let timeIdx = 0; timeIdx < allPoints.length; timeIdx++) {
-          const stripPoints = allPoints[timeIdx].filter((p) => p !== null);
+        // Draw filled quads between time slices for continuous surface
+        for (let timeIdx = 0; timeIdx < allPoints.length - 1; timeIdx++) {
+          const currentSlice = allPoints[timeIdx];
+          const nextSlice = allPoints[timeIdx + 1];
 
-          if (stripPoints.length > 1) {
-            const avgIntensity =
-              stripPoints.reduce((sum, p) => sum + p.intensity, 0) / stripPoints.length;
-            const avgZ = stripPoints.reduce((sum, p) => sum + p.zFinal, 0) / stripPoints.length;
-            const fog = Math.max(0.3, Math.min(1, avgZ / perspective));
+          for (let freqIdx = 0; freqIdx < numFreqBins - 1; freqIdx++) {
+            const p1 = currentSlice[freqIdx];
+            const p2 = currentSlice[freqIdx + 1];
+            const p3 = nextSlice[freqIdx + 1];
+            const p4 = nextSlice[freqIdx];
 
-            const brightness = 0.4 + avgIntensity * 0.6;
-            const cyanR = Math.floor(0 * brightness * fog);
-            const cyanG = Math.floor(251 * brightness * fog);
-            const cyanB = Math.floor(255 * brightness * fog);
+            // Only draw if all 4 corner points are valid
+            if (p1 && p2 && p3 && p4) {
+              // Average intensity and depth for the quad
+              const avgIntensity = (p1.intensity + p2.intensity + p3.intensity + p4.intensity) / 4;
+              const avgZ = (p1.zFinal + p2.zFinal + p3.zFinal + p4.zFinal) / 4;
+              const fog = Math.max(0.3, Math.min(1, avgZ / perspective));
 
-            ctx.beginPath();
-            stripPoints.forEach((p, idx) => {
-              if (idx === 0) ctx.moveTo(p.x, p.y);
-              else ctx.lineTo(p.x, p.y);
-            });
+              // Cyan color with intensity-based brightness
+              const brightness = 0.4 + avgIntensity * 0.6;
+              const cyanR = Math.floor(0 * brightness * fog);
+              const cyanG = Math.floor(251 * brightness * fog);
+              const cyanB = Math.floor(255 * brightness * fog);
+              const fillAlpha = (0.3 + avgIntensity * 0.5) * fog;
 
-            const strokeAlpha = (0.4 + avgIntensity * 0.6) * fog;
-            ctx.strokeStyle = `rgba(${cyanR}, ${cyanG}, ${cyanB}, ${strokeAlpha})`;
-            ctx.lineWidth = 2 * fog;
-            ctx.stroke();
-          }
-        }
+              // Draw filled quad
+              ctx.fillStyle = `rgba(${cyanR}, ${cyanG}, ${cyanB}, ${fillAlpha})`;
+              ctx.beginPath();
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.lineTo(p3.x, p3.y);
+              ctx.lineTo(p4.x, p4.y);
+              ctx.closePath();
+              ctx.fill();
 
-        // Draw vertical lines (time evolution of each frequency)
-        for (let freqIdx = 0; freqIdx < numFreqBins; freqIdx += 4) {
-          // Sample every 4th frequency for performance
-          ctx.beginPath();
-          let firstPoint = true;
-
-          for (let timeIdx = 0; timeIdx < allPoints.length; timeIdx++) {
-            const point = allPoints[timeIdx][freqIdx];
-            if (point) {
-              if (firstPoint) {
-                ctx.moveTo(point.x, point.y);
-                firstPoint = false;
-              } else {
-                ctx.lineTo(point.x, point.y);
-              }
+              // Optional: Draw edges for definition
+              ctx.strokeStyle = `rgba(${cyanR}, ${cyanG}, ${cyanB}, ${fillAlpha * 0.6})`;
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
             }
-          }
-
-          // Average intensity for this frequency column
-          const validPoints = allPoints.map((tp) => tp[freqIdx]).filter((p) => p !== null);
-          if (validPoints.length > 1) {
-            const avgIntensity =
-              validPoints.reduce((sum, p) => sum + p.intensity, 0) / validPoints.length;
-            const avgZ = validPoints.reduce((sum, p) => sum + p.zFinal, 0) / validPoints.length;
-            const fog = Math.max(0.3, Math.min(1, avgZ / perspective));
-
-            const brightness = 0.3 + avgIntensity * 0.5;
-            const cyanR = Math.floor(0 * brightness * fog);
-            const cyanG = Math.floor(251 * brightness * fog);
-            const cyanB = Math.floor(255 * brightness * fog);
-
-            const strokeAlpha = (0.3 + avgIntensity * 0.4) * fog;
-            ctx.strokeStyle = `rgba(${cyanR}, ${cyanG}, ${cyanB}, ${strokeAlpha})`;
-            ctx.lineWidth = 1.5 * fog;
-            ctx.stroke();
           }
         }
 
