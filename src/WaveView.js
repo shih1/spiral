@@ -5,8 +5,8 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
   const animationRef = useRef(null);
 
   // 3D controls (matching SpiralTowerVisualizer)
-  const rotationRef = useRef(0);
-  const pitchRef = useRef(0.8);
+  const rotationRef = useRef(Math.PI); // 180 degrees
+  const pitchRef = useRef(20 * Math.PI / 180); // 20 degrees
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const velocity = useRef({ x: 0.002, y: 0 });
@@ -30,6 +30,7 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
 
     const handleMouseUp = () => {
       isDragging.current = false;
+      velocity.current = { x: 0, y: 0 };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -104,16 +105,12 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
 
       // Update 3D controls
       if (mode === '3d') {
-        rotationRef.current += velocity.current.x;
-        pitchRef.current = Math.max(
-          0.1,
-          Math.min(Math.PI - 0.1, pitchRef.current + velocity.current.y)
-        );
-
-        if (!isDragging.current) {
-          velocity.current.x *= 0.95;
-          velocity.current.y *= 0.95;
-          if (Math.abs(velocity.current.x) < 0.001) velocity.current.x = 0.001;
+        if (isDragging.current) {
+          rotationRef.current += velocity.current.x;
+          pitchRef.current = Math.max(
+            0.1,
+            Math.min(Math.PI - 0.1, pitchRef.current + velocity.current.y)
+          );
         }
       }
 
@@ -306,6 +303,15 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
         }
 
         ctx.globalCompositeOperation = 'source-over'; // Reset blend mode
+
+        // Display coordinates in corner
+        ctx.font = '12px monospace';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.textAlign = 'left';
+        const rotDeg = ((rotationRef.current * 180) / Math.PI).toFixed(1);
+        const pitchDeg = ((pitchRef.current * 180) / Math.PI).toFixed(1);
+        ctx.fillText(`Rotation: ${rotDeg}°`, 10, 20);
+        ctx.fillText(`Pitch: ${pitchDeg}°`, 10, 35);
       }
     };
 
