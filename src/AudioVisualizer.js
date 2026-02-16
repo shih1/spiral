@@ -143,7 +143,7 @@ const AudioVisualizer = ({ analyserNode, audioContext }) => {
         // Note: spectroscope rendering is handled by Spectroscope3D component
         if (currentStyle === 'beams') {
           // BEAMS STYLE - Logarithmic bars
-          const totalBars = 200;
+          const totalBars = 600;
           const logRange = logMax - logMin;
           const logStep = logRange / totalBars;
 

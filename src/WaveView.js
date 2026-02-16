@@ -1,8 +1,152 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
+// Wave color scheme generator
+const getWaveColor = (intensity, scheme) => {
+  let r, g, b;
+
+  switch (scheme) {
+    case 'cyan':
+      // Classic: Cyan with inverse intensity (peaks darker)
+      const darkness = 1.0 - intensity;
+      r = 0;
+      g = Math.floor(251 * darkness);
+      b = Math.floor(255 * darkness);
+      break;
+
+    case 'fire':
+      // Fire: Black → Red → Orange → Yellow → White
+      if (intensity < 0.25) {
+        const t = intensity / 0.25;
+        r = Math.floor(t * 128);
+        g = 0;
+        b = 0;
+      } else if (intensity < 0.5) {
+        const t = (intensity - 0.25) / 0.25;
+        r = Math.floor(128 + t * 127);
+        g = Math.floor(t * 100);
+        b = 0;
+      } else if (intensity < 0.75) {
+        const t = (intensity - 0.5) / 0.25;
+        r = 255;
+        g = Math.floor(100 + t * 155);
+        b = Math.floor(t * 100);
+      } else {
+        const t = (intensity - 0.75) / 0.25;
+        r = 255;
+        g = 255;
+        b = Math.floor(100 + t * 155);
+      }
+      break;
+
+    case 'rainbow':
+      // Rainbow spectrum
+      if (intensity < 0.2) {
+        const t = intensity / 0.2;
+        r = Math.floor(148 + t * 107);
+        g = 0;
+        b = Math.floor(211 * (1 - t * 0.5));
+      } else if (intensity < 0.4) {
+        const t = (intensity - 0.2) / 0.2;
+        r = Math.floor(255 * (1 - t));
+        g = 0;
+        b = Math.floor(106 + t * 149);
+      } else if (intensity < 0.6) {
+        const t = (intensity - 0.4) / 0.2;
+        r = 0;
+        g = Math.floor(t * 255);
+        b = 255;
+      } else if (intensity < 0.8) {
+        const t = (intensity - 0.6) / 0.2;
+        r = Math.floor(t * 255);
+        g = 255;
+        b = Math.floor(255 * (1 - t));
+      } else {
+        const t = (intensity - 0.8) / 0.2;
+        r = 255;
+        g = Math.floor(255 * (1 - t * 0.5));
+        b = 0;
+      }
+      break;
+
+    case 'space':
+      // Purple to Magenta
+      if (intensity < 0.5) {
+        const t = intensity / 0.5;
+        r = Math.floor(t * 128);
+        g = 0;
+        b = Math.floor(64 + t * 64);
+      } else {
+        const t = (intensity - 0.5) / 0.5;
+        r = Math.floor(128 + t * 127);
+        g = Math.floor(t * 100);
+        b = Math.floor(128 + t * 127);
+      }
+      break;
+
+    case 'forest':
+      // Matrix: Dark green to bright green
+      const t = intensity;
+      r = 0;
+      g = Math.floor(t * 255);
+      b = Math.floor(t * 100);
+      break;
+
+    case 'electric':
+      // Electric: Dark blue to bright white
+      if (intensity < 0.3) {
+        const t = intensity / 0.3;
+        r = 0;
+        g = Math.floor(t * 50);
+        b = Math.floor(100 + t * 155);
+      } else if (intensity < 0.7) {
+        const t = (intensity - 0.3) / 0.4;
+        r = Math.floor(t * 100);
+        g = Math.floor(50 + t * 150);
+        b = 255;
+      } else {
+        const t = (intensity - 0.7) / 0.3;
+        r = Math.floor(100 + t * 155);
+        g = Math.floor(200 + t * 55);
+        b = 255;
+      }
+      break;
+
+    case 'ocean':
+      // Ocean: Deep blue to turquoise
+      if (intensity < 0.4) {
+        const t = intensity / 0.4;
+        r = 0;
+        g = Math.floor(t * 50);
+        b = Math.floor(80 + t * 100);
+      } else {
+        const t = (intensity - 0.4) / 0.6;
+        r = Math.floor(t * 50);
+        g = Math.floor(50 + t * 205);
+        b = Math.floor(180 + t * 75);
+      }
+      break;
+
+    case 'mono':
+      // Monochrome: Black to White
+      const brightness = Math.floor(intensity * 255);
+      r = brightness;
+      g = brightness;
+      b = brightness;
+      break;
+
+    default:
+      r = 0;
+      g = 251;
+      b = 255;
+  }
+
+  return { r, g, b };
+};
 
 const WaveView = ({ analyserNode, audioContext, mode }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
+  const [colorScheme, setColorScheme] = useState('cyan');
 
   // 3D controls (matching SpiralTowerVisualizer)
   const rotationRef = useRef(Math.PI); // 180 degrees
@@ -87,32 +231,6 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
     // Frequency bins (lower resolution for performance)
     const numFreqBins = 200;
 
-    const getColorFromIntensity = (intensity) => {
-      let r, g, b;
-      if (intensity < 0.25) {
-        const t = intensity / 0.25;
-        r = 0;
-        g = 0;
-        b = Math.floor(t * 100);
-      } else if (intensity < 0.5) {
-        const t = (intensity - 0.25) / 0.25;
-        r = 0;
-        g = Math.floor(t * 251);
-        b = Math.floor(100 + t * 155);
-      } else if (intensity < 0.75) {
-        const t = (intensity - 0.5) / 0.25;
-        r = Math.floor(t * 255);
-        g = 251;
-        b = 255;
-      } else {
-        const t = (intensity - 0.75) / 0.25;
-        r = 255;
-        g = 251 + Math.floor(t * 4);
-        b = 255;
-      }
-      return { r, g, b };
-    };
-
     let lastFrameTime = 0;
     const frameInterval = 1000 / 30; // 30 FPS for better performance
 
@@ -178,7 +296,7 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
 
           slice.forEach((intensity, freqIdx) => {
             const x = freqIdx * sliceWidth;
-            const color = getColorFromIntensity(intensity);
+            const color = getWaveColor(intensity, colorScheme);
             ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
             ctx.fillRect(x, y, Math.ceil(sliceWidth), Math.ceil(sliceHeight));
           });
@@ -297,15 +415,15 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
               const avgZ = (p1.zFinal + p2.zFinal + p3.zFinal + p4.zFinal) / 4;
               const fog = Math.max(0.3, Math.min(1, avgZ / perspective));
 
-              // Cyan color with intensity-based brightness
-              const brightness = 0.4 + avgIntensity * 0.6;
-              const cyanR = Math.floor(0 * brightness * fog);
-              const cyanG = Math.floor(251 * brightness * fog);
-              const cyanB = Math.floor(255 * brightness * fog);
-              const fillAlpha = (0.3 + avgIntensity * 0.5) * fog;
+              // Get color from scheme
+              const color = getWaveColor(avgIntensity, colorScheme);
+              const finalR = Math.floor(color.r * fog);
+              const finalG = Math.floor(color.g * fog);
+              const finalB = Math.floor(color.b * fog);
+              const fillAlpha = (0.4 + avgIntensity * 0.6) * fog;
 
               // Draw filled quad
-              ctx.fillStyle = `rgba(${cyanR}, ${cyanG}, ${cyanB}, ${fillAlpha})`;
+              ctx.fillStyle = `rgba(${finalR}, ${finalG}, ${finalB}, ${fillAlpha})`;
               ctx.beginPath();
               ctx.moveTo(p1.x, p1.y);
               ctx.lineTo(p2.x, p2.y);
@@ -338,19 +456,45 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
       cancelAnimationFrame(animationRef.current);
       fftAnalyser.disconnect();
     };
-  }, [analyserNode, audioContext, mode]);
+  }, [analyserNode, audioContext, mode, colorScheme]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={2048}
-      height={300}
-      onMouseDown={handleMouseDown}
-      onWheel={handleWheel}
-      onClick={handleClick}
-      className="w-full h-48 bg-black/20 rounded-lg border border-white/5"
-      style={{ cursor: mode === '3d' ? 'grab' : 'default' }}
-    />
+    <div>
+      <div className="mb-2 flex gap-2 justify-end">
+        <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
+          {[
+            { value: 'cyan', label: 'Cyan' },
+            { value: 'fire', label: 'Fire' },
+            { value: 'rainbow', label: 'Rainbow' },
+            { value: 'space', label: 'Space' },
+            { value: 'forest', label: 'Forest' },
+            { value: 'electric', label: 'Electric' },
+            { value: 'ocean', label: 'Ocean' },
+            { value: 'mono', label: 'Mono' }
+          ].map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setColorScheme(value)}
+              className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase transition-all ${
+                colorScheme === value ? 'bg-cyan-500 text-black shadow-lg' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <canvas
+        ref={canvasRef}
+        width={2048}
+        height={300}
+        onMouseDown={handleMouseDown}
+        onWheel={handleWheel}
+        onClick={handleClick}
+        className="w-full h-48 bg-black/20 rounded-lg border border-white/5"
+        style={{ cursor: mode === '3d' ? 'grab' : 'default' }}
+      />
+    </div>
   );
 };
 
