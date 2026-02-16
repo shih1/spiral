@@ -10,6 +10,7 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const velocity = useRef({ x: 0.002, y: 0 });
+  const zoomRef = useRef(1.0);
 
   // Wave data buffer - store history of frequency data
   const historyRef = useRef([]);
@@ -37,6 +38,25 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleWheel = (e) => {
+    if (mode !== '3d') return;
+    e.preventDefault();
+
+    const zoomSpeed = 0.001;
+    const delta = -e.deltaY * zoomSpeed;
+    zoomRef.current = Math.max(0.5, Math.min(3.0, zoomRef.current + delta));
+  };
+
+  const handleClick = (e) => {
+    if (mode !== '3d') return;
+    if (e.ctrlKey || e.metaKey) {
+      // Reset view to defaults
+      rotationRef.current = Math.PI; // 180 degrees
+      pitchRef.current = 20 * Math.PI / 180; // 20 degrees
+      zoomRef.current = 1.0;
+    }
   };
 
   useEffect(() => {
@@ -169,7 +189,7 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
         const centerY = height / 2 + 50;
         const perspective = 600;
         const depthSpacing = 8; // Space between time slices
-        const widthScale = 1.5;
+        const widthScale = 3.0; // Doubled for more horizontal spread
         const heightScale = 120;
 
         // Helper function to project 3D point to 2D
@@ -187,7 +207,7 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
           const zFinal = zPitch + perspective;
           if (zFinal <= 10) return null;
 
-          const scale = perspective / zFinal;
+          const scale = (perspective / zFinal) * zoomRef.current;
           return {
             x: centerX + xRot * scale,
             y: centerY + yPitch * scale,
@@ -238,7 +258,7 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
 
           for (let freqIdx = 0; freqIdx < numFreqBins; freqIdx++) {
             const intensity = slice[freqIdx];
-            const x3d = (freqIdx - numFreqBins / 2) * widthScale;
+            const x3d = (numFreqBins / 2 - freqIdx) * widthScale; // Reversed for 180° default view
             const y3d = -intensity * heightScale;
 
             const projected = project3D(x3d, y3d, z3d);
@@ -293,11 +313,6 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
               ctx.lineTo(p4.x, p4.y);
               ctx.closePath();
               ctx.fill();
-
-              // Optional: Draw edges for definition
-              ctx.strokeStyle = `rgba(${cyanR}, ${cyanG}, ${cyanB}, ${fillAlpha * 0.6})`;
-              ctx.lineWidth = 0.5;
-              ctx.stroke();
             }
           }
         }
@@ -310,8 +325,10 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
         ctx.textAlign = 'left';
         const rotDeg = ((rotationRef.current * 180) / Math.PI).toFixed(1);
         const pitchDeg = ((pitchRef.current * 180) / Math.PI).toFixed(1);
+        const zoomLevel = zoomRef.current.toFixed(2);
         ctx.fillText(`Rotation: ${rotDeg}°`, 10, 20);
         ctx.fillText(`Pitch: ${pitchDeg}°`, 10, 35);
+        ctx.fillText(`Zoom: ${zoomLevel}x`, 10, 50);
       }
     };
 
@@ -329,6 +346,8 @@ const WaveView = ({ analyserNode, audioContext, mode }) => {
       width={2048}
       height={300}
       onMouseDown={handleMouseDown}
+      onWheel={handleWheel}
+      onClick={handleClick}
       className="w-full h-48 bg-black/20 rounded-lg border border-white/5"
       style={{ cursor: mode === '3d' ? 'grab' : 'default' }}
     />
